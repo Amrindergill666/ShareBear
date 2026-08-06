@@ -5,6 +5,7 @@ export interface Device {
   name: string;
   ip: string;
   port: number;
+  platform: string;
   lastSeen: number;
   isOnline: boolean;
 }
@@ -14,6 +15,7 @@ interface DeviceState {
   addOrUpdateDevice: (device: Device) => void;
   removeDevice: (id: string) => void;
   clearOfflineDevices: () => void;
+  clearAllDevices: () => void;
 }
 
 export const useDeviceStore = create<DeviceState>((set) => ({
@@ -41,4 +43,6 @@ export const useDeviceStore = create<DeviceState>((set) => ({
       });
       return { devices: newDevices };
     }),
+  clearAllDevices: () =>
+    set({ devices: {} }),
 }));
