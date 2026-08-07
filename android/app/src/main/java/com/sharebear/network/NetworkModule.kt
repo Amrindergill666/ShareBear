@@ -5,6 +5,7 @@ import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.sharebear.network.discovery.DiscoveryEngine
 import com.sharebear.network.events.DiscoveryListenerInterface
 import com.sharebear.network.models.DeviceInfo
+import com.sharebear.network.server.HttpServer
 
 /**
  * Native module exposing discovery controller APIs to React Native.
@@ -13,9 +14,84 @@ class NetworkModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext), DiscoveryListenerInterface {
 
     private var engine: DiscoveryEngine? = null
+    private var server: HttpServer? = null
 
     override fun getName(): String {
         return "NetworkModule"
+    }
+
+    /**
+     * Starts the HTTP Server on the specified port.
+     */
+    @ReactMethod
+    fun startServer(port: Int, deviceId: String, deviceName: String, promise: Promise) {
+        try {
+            server?.stop()
+
+            val newServer = HttpServer(port, deviceId, deviceName) { requests, lastIp ->
+                val map = Arguments.createMap().apply {
+                    putBoolean("isRunning", true)
+                    putInt("port", port)
+                    putInt("requestsReceived", requests)
+                    putString("lastRequestIp", lastIp)
+                }
+                emitEvent("ServerStatsUpdated", map)
+            }
+            newServer.start()
+            server = newServer
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject("START_SERVER_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Stops the HTTP Server.
+     */
+    @ReactMethod
+    fun stopServer(promise: Promise) {
+        try {
+            server?.stop()
+            server = null
+
+            val map = Arguments.createMap().apply {
+                putBoolean("isRunning", false)
+                putInt("port", 0)
+                putInt("requestsReceived", 0)
+                putString("lastRequestIp", "none")
+            }
+            emitEvent("ServerStatsUpdated", map)
+            promise.resolve(null)
+        } catch (e: Exception) {
+            promise.reject("STOP_SERVER_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Returns snapshot statistics of the server.
+     */
+    @ReactMethod
+    fun getServerStats(promise: Promise) {
+        try {
+            val stats = server?.getStats()
+            val map = Arguments.createMap()
+            if (stats != null) {
+                map.putBoolean("isRunning", stats["isRunning"] as Boolean)
+                map.putInt("port", stats["port"] as Int)
+                map.putInt("requestsReceived", stats["requestsReceived"] as Int)
+                map.putString("lastRequestIp", stats["lastRequestIp"] as String)
+                map.putDouble("uptime", (stats["uptime"] as Long).toDouble())
+            } else {
+                map.putBoolean("isRunning", false)
+                map.putInt("port", 0)
+                map.putInt("requestsReceived", 0)
+                map.putString("lastRequestIp", "none")
+                map.putDouble("uptime", 0.0)
+            }
+            promise.resolve(map)
+        } catch (e: Exception) {
+            promise.reject("GET_STATS_ERROR", e.message, e)
+        }
     }
 
     /**
@@ -100,6 +176,8 @@ class NetworkModule(private val reactContext: ReactApplicationContext) :
         super.invalidate()
         engine?.shutdown()
         engine = null
+        server?.stop()
+        server = null
     }
 
     private fun deviceToMap(device: DeviceInfo): WritableMap {

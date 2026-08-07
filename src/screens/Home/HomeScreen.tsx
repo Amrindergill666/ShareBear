@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -6,9 +6,10 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Modal,
   Platform as RNPlatform,
 } from 'react-native';
-import { useDeviceStore } from '../../store/deviceStore';
+import { useDeviceStore, Device } from '../../store/deviceStore';
 import { useUiStore } from '../../store/uiStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { startDiscovery, stopDiscovery } from '../../features/discovery/discoveryManager';
@@ -21,6 +22,12 @@ export function HomeScreen() {
 
   const deviceList = Object.values(devices);
 
+  // API inspection state
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiResponse, setApiResponse] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [activeEndpoint, setActiveEndpoint] = useState<string>('/info');
 
   const handleToggleDiscovery = async () => {
     if (isDiscoveryActive) {
@@ -29,6 +36,58 @@ export function HomeScreen() {
       await startDiscovery();
     }
   };
+
+  const fetchEndpoint = async (device: Device, path: string) => {
+    setApiLoading(true);
+    setApiResponse(null);
+    setApiError(null);
+    setActiveEndpoint(path);
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000); // 4-second timeout
+
+      const url = `http://${device.ip}:${device.port}${path}`;
+      console.log(`[HomeScreen] Fetching: ${url}`);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setApiResponse(JSON.stringify(data, null, 2));
+    } catch (err: any) {
+      console.error('[HomeScreen] Fetch failed:', err);
+      if (err.name === 'AbortError') {
+        setApiError('Connection timed out (4s)');
+      } else {
+        setApiError(err.message || 'Failed to connect to device API');
+      }
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  // Automatically load /info when a device is selected
+  useEffect(() => {
+    if (selectedDevice) {
+      fetchEndpoint(selectedDevice, '/info');
+    } else {
+      setApiResponse(null);
+      setApiError(null);
+      setApiLoading(false);
+    }
+  }, [selectedDevice]);
 
   const getPlatformIcon = (platform: string) => {
     switch (platform.toLowerCase()) {
@@ -117,7 +176,12 @@ export function HomeScreen() {
             showsVerticalScrollIndicator={false}
           >
             {deviceList.map((device) => (
-              <View key={device.id} style={styles.deviceCard}>
+              <TouchableOpacity
+                key={device.id}
+                style={styles.deviceCard}
+                onPress={() => setSelectedDevice(device)}
+                activeOpacity={0.7}
+              >
                 <View
                   style={[
                     styles.platformIndicator,
@@ -136,11 +200,10 @@ export function HomeScreen() {
                   </Text>
                 </View>
 
-                <View style={styles.statusContainer}>
-                  <View style={styles.statusIndicator} />
-                  <Text style={styles.statusText}>Active</Text>
+                <View style={styles.inspectBadge}>
+                  <Text style={styles.inspectText}>Inspect API</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
           </ScrollView>
         )}
@@ -160,6 +223,89 @@ export function HomeScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* API Inspection Modal */}
+      {selectedDevice && (
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={selectedDevice !== null}
+          onRequestClose={() => setSelectedDevice(null)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              {/* Header */}
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalTitle}>{selectedDevice.name}</Text>
+                  <Text style={styles.modalSubtitle}>
+                    http://{selectedDevice.ip}:{selectedDevice.port}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setSelectedDevice(null)}
+                >
+                  <Text style={styles.closeButtonText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Endpoint Tabs */}
+              <View style={styles.endpointsContainer}>
+                {['/info', '/ping', '/health', '/capabilities'].map((path) => (
+                  <TouchableOpacity
+                    key={path}
+                    style={[
+                      styles.endpointTab,
+                      activeEndpoint === path && styles.endpointTabActive,
+                    ]}
+                    onPress={() => fetchEndpoint(selectedDevice, path)}
+                  >
+                    <Text
+                      style={[
+                        styles.endpointTabText,
+                        activeEndpoint === path && styles.endpointTabTextActive,
+                      ]}
+                    >
+                      {path}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Response Code Block */}
+              <View style={styles.responseContainer}>
+                <View style={styles.responseHeaderRow}>
+                  <Text style={styles.responseHeaderLabel}>Response Body</Text>
+                  <TouchableOpacity
+                    style={styles.refreshButton}
+                    onPress={() => fetchEndpoint(selectedDevice, activeEndpoint)}
+                    disabled={apiLoading}
+                  >
+                    <Text style={styles.refreshButtonText}>🔄 Retry</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {apiLoading ? (
+                  <View style={styles.loaderContainer}>
+                    <ActivityIndicator size="large" color="#3B82F6" />
+                    <Text style={styles.loadingText}>Calling peer endpoint...</Text>
+                  </View>
+                ) : apiError ? (
+                  <ScrollView style={styles.errorScroll}>
+                    <Text style={styles.errorTextTitle}>⚠️ Connection Error</Text>
+                    <Text style={styles.errorTextDesc}>{apiError}</Text>
+                  </ScrollView>
+                ) : (
+                  <ScrollView style={styles.jsonScroll}>
+                    <Text style={styles.jsonText}>{apiResponse || '{}'}</Text>
+                  </ScrollView>
+                )}
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -286,27 +432,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748B',
   },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+  inspectBadge: {
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
     borderRadius: 6,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderWidth: 0.5,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: 'rgba(59, 130, 246, 0.3)',
   },
-  statusIndicator: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10B981',
-    marginRight: 6,
-  },
-  statusText: {
+  inspectText: {
     fontSize: 11,
     fontWeight: 'bold',
-    color: '#10B981',
+    color: '#3B82F6',
   },
   footer: {
     marginTop: 16,
@@ -332,5 +469,147 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.8)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#1E293B',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#F8FAFC',
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 4,
+    fontFamily: RNPlatform.OS === 'ios' ? 'Courier New' : 'monospace',
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#334155',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: '#94A3B8',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  endpointsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  endpointTab: {
+    backgroundColor: '#0F172A',
+    borderColor: '#334155',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 8,
+    width: '48%',
+    alignItems: 'center',
+  },
+  endpointTabActive: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  endpointTabText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: 'bold',
+    fontFamily: RNPlatform.OS === 'ios' ? 'Courier New' : 'monospace',
+  },
+  endpointTabTextActive: {
+    color: '#FFFFFF',
+  },
+  responseContainer: {
+    backgroundColor: '#0F172A',
+    borderRadius: 12,
+    padding: 16,
+    height: 240,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  responseHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E293B',
+    paddingBottom: 8,
+    marginBottom: 10,
+  },
+  responseHeaderLabel: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#64748B',
+    textTransform: 'uppercase',
+  },
+  refreshButton: {
+    backgroundColor: '#1E293B',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  refreshButtonText: {
+    fontSize: 10,
+    color: '#E2E8F0',
+    fontWeight: 'bold',
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#64748B',
+    fontSize: 12,
+    marginTop: 10,
+  },
+  errorScroll: {
+    flex: 1,
+  },
+  errorTextTitle: {
+    fontSize: 14,
+    color: '#F43F5E',
+    fontWeight: 'bold',
+    marginBottom: 6,
+  },
+  errorTextDesc: {
+    fontSize: 13,
+    color: '#94A3B8',
+    lineHeight: 18,
+  },
+  jsonScroll: {
+    flex: 1,
+  },
+  jsonText: {
+    fontSize: 12,
+    fontFamily: RNPlatform.OS === 'ios' ? 'Courier New' : 'monospace',
+    color: '#10B981',
   },
 });

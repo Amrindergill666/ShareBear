@@ -16,6 +16,19 @@ interface NetworkModuleInterface {
   ): Promise<void>;
   stopDiscovery(): Promise<void>;
   getDiscoveredDevices(): Promise<DeviceInfo[]>;
+  startServer(
+    port: number,
+    deviceId: string,
+    deviceName: string
+  ): Promise<void>;
+  stopServer(): Promise<void>;
+  getServerStats(): Promise<{
+    isRunning: boolean;
+    port: number;
+    requestsReceived: number;
+    lastRequestIp: string;
+    uptime: number;
+  }>;
 }
 
 const { NetworkModule } = NativeModules;

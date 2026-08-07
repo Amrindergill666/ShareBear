@@ -13,17 +13,33 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import { HomeScreen } from './src/screens/Home/HomeScreen';
+import { ServerScreen } from './src/screens/Server/ServerScreen';
 import { SettingsScreen } from './src/screens/Settings/SettingsScreen';
 import { useUiStore } from './src/store/uiStore';
 import { useSettingsStore } from './src/store';
-import { getBrand,getAndroidId } from 'react-native-device-info';
+import { getDeviceId, getDeviceName, getBrand } from 'react-native-device-info';
+import { startServer } from './src/features/server/serverManager';
+
 function AppContent() {
   const { setDeviceName, setDeviceId } = useSettingsStore();
-  useEffect(() => {
-    setDeviceName(getBrand());
-    getAndroidId().then(id=>setDeviceId(id))
 
+  useEffect(() => {
+    const initializeApp = async () => {
+      try {
+        const name = await getDeviceName();
+        setDeviceName(`${getBrand()} ${name}`);
+        const id = getDeviceId();
+        setDeviceId(id);
+
+        // Auto-start HTTP Control Server on app launch
+        await startServer();
+      } catch (err) {
+        console.error('Failed to initialize app:', err);
+      }
+    };
+    initializeApp();
   }, []);
+
   const safeAreaInsets = useSafeAreaInsets();
   const { activeScreen, setActiveScreen } = useUiStore();
 
@@ -47,7 +63,9 @@ function AppContent() {
 
       {/* Main Content Area */}
       <View style={styles.content}>
-        {activeScreen === 'Home' ? <HomeScreen /> : <SettingsScreen />}
+        {activeScreen === 'Home' && <HomeScreen />}
+        {activeScreen === 'Server' && <ServerScreen />}
+        {activeScreen === 'Settings' && <SettingsScreen />}
       </View>
 
       {/* Custom Bottom Tab Bar */}
@@ -67,6 +85,24 @@ function AppContent() {
             ]}
           >
             Nearby
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.tabItem,
+            activeScreen === 'Server' && styles.tabItemActive,
+          ]}
+          onPress={() => setActiveScreen('Server')}
+        >
+          <Text style={styles.tabIcon}>🖥️</Text>
+          <Text
+            style={[
+              styles.tabLabel,
+              activeScreen === 'Server' && styles.tabLabelActive,
+            ]}
+          >
+            Server
           </Text>
         </TouchableOpacity>
 
