@@ -15,10 +15,13 @@ import {
 import { HomeScreen } from './src/screens/Home/HomeScreen';
 import { ServerScreen } from './src/screens/Server/ServerScreen';
 import { SettingsScreen } from './src/screens/Settings/SettingsScreen';
+import { TransferHistoryScreen } from './src/screens/Transfers/TransferHistoryScreen';
+import { IncomingTransferDialog } from './src/components/IncomingTransferDialog';
 import { useUiStore } from './src/store/uiStore';
 import { useSettingsStore } from './src/store';
 import { getDeviceId, getDeviceName, getBrand } from 'react-native-device-info';
 import { startServer } from './src/features/server/serverManager';
+import { initializeTransferManager } from './src/features/transfer/TransferManager';
 
 function AppContent() {
   const { setDeviceName, setDeviceId } = useSettingsStore();
@@ -33,6 +36,9 @@ function AppContent() {
 
         // Auto-start HTTP Control Server on app launch
         await startServer();
+
+        // Initialize Transfer Manager (load persisted logs & start handshake listeners)
+        initializeTransferManager();
       } catch (err) {
         console.error('Failed to initialize app:', err);
       }
@@ -64,9 +70,13 @@ function AppContent() {
       {/* Main Content Area */}
       <View style={styles.content}>
         {activeScreen === 'Home' && <HomeScreen />}
+        {activeScreen === 'Transfers' && <TransferHistoryScreen />}
         {activeScreen === 'Server' && <ServerScreen />}
         {activeScreen === 'Settings' && <SettingsScreen />}
       </View>
+
+      {/* Mount the Global Incoming Dialog Overlay */}
+      <IncomingTransferDialog />
 
       {/* Custom Bottom Tab Bar */}
       <View style={styles.tabBar}>
@@ -85,6 +95,24 @@ function AppContent() {
             ]}
           >
             Nearby
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.tabItem,
+            activeScreen === 'Transfers' && styles.tabItemActive,
+          ]}
+          onPress={() => setActiveScreen('Transfers')}
+        >
+          <Text style={styles.tabIcon}>📦</Text>
+          <Text
+            style={[
+              styles.tabLabel,
+              activeScreen === 'Transfers' && styles.tabLabelActive,
+            ]}
+          >
+            Transfers
           </Text>
         </TouchableOpacity>
 

@@ -30,8 +30,8 @@ class Router {
     fun route(request: Request): Response {
         val handler = routes[request.path] ?: return Response.error(404, "Endpoint not found: ${request.path}")
 
-        // For this Phase, we only allow GET requests
-        if (request.method != "GET") {
+        // For this Phase, we allow GET and POST requests
+        if (request.method != "GET" && request.method != "POST") {
             return Response.error(405, "Method ${request.method} is not allowed")
         }
 

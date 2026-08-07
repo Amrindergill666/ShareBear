@@ -1,73 +1,39 @@
 import { create } from 'zustand';
+import { Transfer, TransferState, TransferRequest } from '../features/transfer/models';
 
-export interface TransferItem {
-  id: string;
-  fileName: string;
-  fileSize: number;
-  progress: number; // 0 to 100
-  speed: number; // bytes/sec
-  eta: number; // seconds
-  status: 'pending' | 'transferring' | 'completed' | 'failed' | 'cancelled';
-  direction: 'send' | 'receive';
-  peerDeviceName: string;
-  error?: string;
+interface TransferStateStore {
+  transfers: Record<string, Transfer>;
+  activeIncomingRequest: { transferId: string; request: TransferRequest } | null;
+  addTransfer: (transfer: Transfer) => void;
+  updateTransferStatus: (transferId: string, status: TransferState) => void;
+  setActiveIncomingRequest: (request: { transferId: string; request: TransferRequest } | null) => void;
+  setTransfers: (transfers: Record<string, Transfer>) => void;
 }
 
-interface TransferState {
-  transfers: Record<string, TransferItem>;
-  addTransfer: (transfer: TransferItem) => void;
-  updateProgress: (id: string, progress: number, speed: number, eta: number) => void;
-  updateStatus: (id: string, status: TransferItem['status'], error?: string) => void;
-  clearHistory: () => void;
-}
-
-export const useTransferStore = create<TransferState>((set) => ({
+export const useTransferStore = create<TransferStateStore>((set) => ({
   transfers: {},
+  activeIncomingRequest: null,
   addTransfer: (transfer) =>
     set((state) => ({
       transfers: {
         ...state.transfers,
-        [transfer.id]: transfer,
+        [transfer.transferId]: transfer,
       },
     })),
-  updateProgress: (id, progress, speed, eta) =>
+  updateTransferStatus: (transferId, status) =>
     set((state) => {
-      if (!state.transfers[id]) return state;
+      const existing = state.transfers[transferId];
+      if (!existing) return state;
       return {
         transfers: {
           ...state.transfers,
-          [id]: {
-            ...state.transfers[id],
-            progress,
-            speed,
-            eta,
-          },
-        },
-      };
-    }),
-  updateStatus: (id, status, error) =>
-    set((state) => {
-      if (!state.transfers[id]) return state;
-      return {
-        transfers: {
-          ...state.transfers,
-          [id]: {
-            ...state.transfers[id],
+          [transferId]: {
+            ...existing,
             status,
-            error,
           },
         },
       };
     }),
-  clearHistory: () =>
-    set((state) => {
-      const activeTransfers = { ...state.transfers };
-      Object.keys(activeTransfers).forEach((key) => {
-        const item = activeTransfers[key];
-        if (item.status === 'completed' || item.status === 'failed' || item.status === 'cancelled') {
-          delete activeTransfers[key];
-        }
-      });
-      return { transfers: activeTransfers };
-    }),
+  setActiveIncomingRequest: (request) => set({ activeIncomingRequest: request }),
+  setTransfers: (transfers) => set({ transfers }),
 }));

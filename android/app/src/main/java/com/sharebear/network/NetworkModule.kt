@@ -28,20 +28,51 @@ class NetworkModule(private val reactContext: ReactApplicationContext) :
         try {
             server?.stop()
 
-            val newServer = HttpServer(port, deviceId, deviceName) { requests, lastIp ->
-                val map = Arguments.createMap().apply {
-                    putBoolean("isRunning", true)
-                    putInt("port", port)
-                    putInt("requestsReceived", requests)
-                    putString("lastRequestIp", lastIp)
+            val newServer = HttpServer(
+                port = port,
+                deviceId = deviceId,
+                deviceName = deviceName,
+                onIncomingTransferRequest = { transferId, body ->
+                    val map = Arguments.createMap().apply {
+                        putString("transferId", transferId)
+                        putString("body", body)
+                    }
+                    emitEvent("TransferRequestReceived", map)
+                },
+                onStatsUpdated = { requests, lastIp ->
+                    val map = Arguments.createMap().apply {
+                        putBoolean("isRunning", true)
+                        putInt("port", port)
+                        putInt("requestsReceived", requests)
+                        putString("lastRequestIp", lastIp)
+                    }
+                    emitEvent("ServerStatsUpdated", map)
                 }
-                emitEvent("ServerStatsUpdated", map)
-            }
+            )
             newServer.start()
             server = newServer
             promise.resolve(null)
         } catch (e: Exception) {
             promise.reject("START_SERVER_ERROR", e.message, e)
+        }
+    }
+
+    /**
+     * Responds to a blocked incoming handshake request.
+     */
+    @ReactMethod
+    fun respondToTransfer(transferId: String, accept: Boolean, promise: Promise) {
+        try {
+            val session = com.sharebear.network.server.endpoints.TransferRequestHandler.activeSessions[transferId]
+            if (session != null) {
+                session.accepted = accept
+                session.latch.countDown()
+                promise.resolve(true)
+            } else {
+                promise.resolve(false)
+            }
+        } catch (e: Exception) {
+            promise.reject("RESPOND_TRANSFER_ERROR", e.message, e)
         }
     }
 

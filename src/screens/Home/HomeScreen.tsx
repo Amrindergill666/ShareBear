@@ -14,6 +14,7 @@ import { useUiStore } from '../../store/uiStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { startDiscovery, stopDiscovery } from '../../features/discovery/discoveryManager';
 import { RadarAnimation } from '../../components/RadarAnimation';
+import { startOutgoingTransfer } from '../../features/transfer/TransferManager';
 
 export function HomeScreen() {
   const { devices } = useDeviceStore();
@@ -29,11 +30,46 @@ export function HomeScreen() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [activeEndpoint, setActiveEndpoint] = useState<string>('/info');
 
+  // Outgoing transfer request state
+  const [outgoingLoading, setOutgoingLoading] = useState(false);
+  const [outgoingStatus, setOutgoingStatus] = useState<string | null>(null);
+
   const handleToggleDiscovery = async () => {
     if (isDiscoveryActive) {
       await stopDiscovery();
     } else {
       await startDiscovery();
+    }
+  };
+
+  const handleSendRequest = async (device: Device) => {
+    setOutgoingLoading(true);
+    setOutgoingStatus(`Requesting handshake with ${device.name}...`);
+
+    // Create a mock sample file to initiate handshake
+    const mockFiles = [
+      {
+        id: 'mock-file-' + Date.now(),
+        name: 'sharebear_presentation.pdf',
+        size: 5432100, // 5.4 MB
+        mime: 'application/pdf',
+      },
+    ];
+
+    try {
+      const transferId = await startOutgoingTransfer(device.ip, device.port, mockFiles);
+      setOutgoingStatus(`Handshake Accepted!\nID: ${transferId}`);
+      // Keep status visible for 3 seconds then close
+      setTimeout(() => {
+        setOutgoingLoading(false);
+        setOutgoingStatus(null);
+      }, 3000);
+    } catch (err: any) {
+      setOutgoingStatus(`Handshake Declined:\n${err.message || 'Peer rejected request'}`);
+      setTimeout(() => {
+        setOutgoingLoading(false);
+        setOutgoingStatus(null);
+      }, 4000);
     }
   };
 
@@ -176,12 +212,7 @@ export function HomeScreen() {
             showsVerticalScrollIndicator={false}
           >
             {deviceList.map((device) => (
-              <TouchableOpacity
-                key={device.id}
-                style={styles.deviceCard}
-                onPress={() => setSelectedDevice(device)}
-                activeOpacity={0.7}
-              >
+              <View key={device.id} style={styles.deviceCard}>
                 <View
                   style={[
                     styles.platformIndicator,
@@ -200,10 +231,25 @@ export function HomeScreen() {
                   </Text>
                 </View>
 
-                <View style={styles.inspectBadge}>
-                  <Text style={styles.inspectText}>Inspect API</Text>
+                {/* Interactive Action Buttons */}
+                <View style={styles.cardActions}>
+                  <TouchableOpacity
+                    style={styles.inspectBtn}
+                    onPress={() => setSelectedDevice(device)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.inspectBtnText}>Inspect API</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.sendBtn}
+                    onPress={() => handleSendRequest(device)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.sendBtnText}>Send Req</Text>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
+              </View>
             ))}
           </ScrollView>
         )}
@@ -306,6 +352,27 @@ export function HomeScreen() {
           </View>
         </Modal>
       )}
+
+      {/* Outgoing Handshake Status Modal Dialog */}
+      <Modal
+        transparent={true}
+        visible={outgoingLoading}
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.statusDialogCard}>
+            <Text style={styles.statusDialogHeader}>Outgoing Handshake</Text>
+            {outgoingStatus && outgoingStatus.includes('Accepted') ? (
+              <Text style={styles.statusIcon}>✅</Text>
+            ) : outgoingStatus && outgoingStatus.includes('Declined') ? (
+              <Text style={styles.statusIcon}>❌</Text>
+            ) : (
+              <ActivityIndicator size="large" color="#3B82F6" style={{ marginVertical: 16 }} />
+            )}
+            <Text style={styles.statusDialogMessage}>{outgoingStatus}</Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -432,18 +499,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748B',
   },
-  inspectBadge: {
+  cardActions: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 6,
+    marginLeft: 8,
+  },
+  inspectBtn: {
     backgroundColor: 'rgba(59, 130, 246, 0.1)',
     borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderWidth: 0.5,
     borderColor: 'rgba(59, 130, 246, 0.3)',
+    alignItems: 'center',
   },
-  inspectText: {
+  inspectBtnText: {
     fontSize: 11,
     fontWeight: 'bold',
     color: '#3B82F6',
+  },
+  sendBtn: {
+    backgroundColor: '#3B82F6',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    alignItems: 'center',
+  },
+  sendBtnText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   footer: {
     marginTop: 16,
@@ -475,13 +561,15 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.8)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   modalContent: {
     backgroundColor: '#1E293B',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderRadius: 24,
     padding: 24,
+    width: '100%',
     maxHeight: '80%',
     borderWidth: 1,
     borderColor: '#334155',
@@ -611,5 +699,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: RNPlatform.OS === 'ios' ? 'Courier New' : 'monospace',
     color: '#10B981',
+  },
+
+  // Outgoing Handshake Status Card Styles
+  statusDialogCard: {
+    backgroundColor: '#1E293B',
+    borderRadius: 20,
+    padding: 24,
+    width: '80%',
+    maxWidth: 300,
+    borderWidth: 1,
+    borderColor: '#334155',
+    alignItems: 'center',
+  },
+  statusDialogHeader: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#F8FAFC',
+    marginBottom: 16,
+  },
+  statusIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  statusDialogMessage: {
+    fontSize: 14,
+    color: '#E2E8F0',
+    textAlign: 'center',
+    lineHeight: 20,
+    fontWeight: '500',
   },
 });

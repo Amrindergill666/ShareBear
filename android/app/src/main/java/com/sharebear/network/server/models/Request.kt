@@ -12,7 +12,8 @@ class Request(
     val method: String,
     val path: String,
     val headers: Map<String, String>,
-    val clientIp: String
+    val clientIp: String,
+    val body: String
 ) {
     companion object {
         /**
@@ -43,7 +44,24 @@ class Request(
                     }
                 }
 
-                return Request(method, path, headers, clientIp)
+                // Parse request body for POST/PUT if Content-Length is provided
+                var bodyString = ""
+                val lengthHeader = headers["content-length"]
+                if (lengthHeader != null) {
+                    val contentLength = lengthHeader.toIntOrNull() ?: 0
+                    if (contentLength > 0) {
+                        val bodyChars = CharArray(contentLength)
+                        var read = 0
+                        while (read < contentLength) {
+                            val result = reader.read(bodyChars, read, contentLength - read)
+                            if (result == -1) break
+                            read += result
+                        }
+                        bodyString = String(bodyChars)
+                    }
+                }
+
+                return Request(method, path, headers, clientIp, bodyString)
             } catch (e: Exception) {
                 return null
             }

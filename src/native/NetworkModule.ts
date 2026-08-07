@@ -22,6 +22,10 @@ interface NetworkModuleInterface {
     deviceName: string
   ): Promise<void>;
   stopServer(): Promise<void>;
+  respondToTransfer(
+    transferId: string,
+    accept: boolean
+  ): Promise<boolean>;
   getServerStats(): Promise<{
     isRunning: boolean;
     port: number;
