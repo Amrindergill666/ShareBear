@@ -8,9 +8,11 @@ import {
 } from 'react-native';
 import { useTransferStore } from '../store/transferStore';
 import { acceptIncomingTransfer, rejectIncomingTransfer } from '../features/transfer/TransferManager';
+import { useTheme } from '../theme';
 
 export function IncomingTransferDialog() {
   const { activeIncomingRequest } = useTransferStore();
+  const { colors } = useTheme();
 
   if (!activeIncomingRequest) {
     return null;
@@ -45,46 +47,82 @@ export function IncomingTransferDialog() {
       visible={true}
     >
       <View style={styles.overlay}>
-        <View style={styles.dialogCard}>
-          <Text style={styles.dialogHeader}>Incoming Transfer</Text>
+        <View
+          style={[
+            styles.dialogCard,
+            {
+              backgroundColor: colors.surfaceElevated,
+              borderColor: colors.cardBorder,
+            },
+          ]}
+        >
+          <Text style={[styles.dialogHeader, { color: colors.textPrimary }]}>Incoming Transfer</Text>
 
           {/* Sender Row */}
-          <View style={styles.senderContainer}>
+          <View
+            style={[
+              styles.senderContainer,
+              {
+                backgroundColor: colors.surfaceVariant,
+                borderColor: colors.outlineVariant,
+              },
+            ]}
+          >
             <Text style={styles.avatar}>🐻</Text>
             <View>
-              <Text style={styles.senderLabel}>From</Text>
-              <Text style={styles.senderName}>{senderName}</Text>
+              <Text style={[styles.senderLabel, { color: colors.textMuted }]}>From</Text>
+              <Text style={[styles.senderName, { color: colors.textPrimary }]}>{senderName}</Text>
             </View>
           </View>
 
           {/* Files Row */}
-          <View style={styles.detailsCard}>
-            <Text style={styles.detailsHeader}>
+          <View
+            style={[
+              styles.detailsCard,
+              {
+                backgroundColor: colors.surfaceVariant,
+                borderColor: colors.outlineVariant,
+              },
+            ]}
+          >
+            <Text style={[styles.detailsHeader, { color: colors.primary }]}>
               {fileCount === 1 ? '1 File' : `${fileCount} Files`}
             </Text>
-            <Text style={styles.fileName} numberOfLines={1}>
+            <Text style={[styles.fileName, { color: colors.textPrimary }]} numberOfLines={1}>
               {firstFileName}
               {fileCount > 1 && ` and ${fileCount - 1} other${fileCount > 2 ? 's' : ''}`}
             </Text>
-            <Text style={styles.fileSize}>{formatSize(totalSize)}</Text>
+            <Text style={[styles.fileSize, { color: colors.textSecondary }]}>{formatSize(totalSize)}</Text>
           </View>
 
           {/* Actions */}
           <View style={styles.buttonRow}>
             <TouchableOpacity
-              style={[styles.button, styles.rejectButton]}
+              style={[
+                styles.button,
+                {
+                  backgroundColor: `${colors.error}18`,
+                  borderColor: `${colors.error}40`,
+                },
+              ]}
               onPress={handleReject}
               activeOpacity={0.8}
             >
-              <Text style={[styles.buttonText, styles.rejectText]}>Reject</Text>
+              <Text style={[styles.buttonText, { color: colors.error }]}>Reject</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.button, styles.acceptButton]}
+              style={[
+                styles.button,
+                {
+                  backgroundColor: colors.primary,
+                  borderColor: colors.primary,
+                },
+              ]}
               onPress={handleAccept}
               activeOpacity={0.8}
             >
-              <Text style={[styles.buttonText, styles.acceptText]}>Accept</Text>
+              <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Accept</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -23,6 +23,7 @@ import DocumentPicker from 'react-native-document-picker';
 import { NativeNetworkModule } from '../../native/NetworkModule';
 import { useTransferStore } from '../../store/transferStore';
 import { getFreeDiskStorage, getTotalDiskCapacity } from 'react-native-device-info';
+import { useTheme } from '../../theme';
 import {
   Menu,
   Bell,
@@ -73,6 +74,7 @@ export function HomeScreen() {
   const { devices } = useDeviceStore();
   const { isDiscoveryActive } = useUiStore();
   const { deviceName, deviceId } = useSettingsStore();
+  const { colors } = useTheme();
 
   const deviceList = Object.values(devices);
 
@@ -350,15 +352,15 @@ export function HomeScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header Bar */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerButton} activeOpacity={0.7}>
-          <Menu size={24} color="#BEC8C9" />
+          <Menu size={24} color={colors.textSecondary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>ShareBear</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>ShareBear</Text>
         <TouchableOpacity style={styles.headerButton} activeOpacity={0.7}>
-          <Bell size={24} color="#BEC8C9" />
+          <Bell size={24} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
@@ -369,66 +371,112 @@ export function HomeScreen() {
           <TouchableOpacity
             style={[
               styles.actionCard,
-              isDiscoveryActive && styles.actionCardScanningActive,
+              {
+                backgroundColor: colors.primaryContainer,
+                borderColor: `${colors.primary}30`,
+              },
+              isDiscoveryActive && {
+                borderColor: colors.primary,
+                backgroundColor: `${colors.primary}44`,
+              },
             ]}
             onPress={handleToggleDiscovery}
             activeOpacity={0.8}
           >
-            <View style={styles.actionCardIconCircle}>
+            <View style={[styles.actionCardIconCircle, { backgroundColor: colors.primary }]}>
               {isDiscoveryActive ? (
-                <ActivityIndicator size="small" color="#56472B" />
+                <ActivityIndicator size="small" color={colors.onPrimary} />
               ) : (
-                <ArrowUp size={24} color="#56472B" />
+                <ArrowUp size={24} color={colors.onPrimary} />
               )}
             </View>
-            <Text style={styles.actionCardText}>
+            <Text style={[styles.actionCardText, { color: colors.primary }]}>
               {isDiscoveryActive ? 'Scanning...' : 'Scan'}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.actionCard}
+            style={[
+              styles.actionCard,
+              {
+                backgroundColor: colors.primaryContainer,
+                borderColor: `${colors.primary}30`,
+              },
+            ]}
             onPress={() => {
               setManualError(null);
               setManualModalVisible(true);
             }}
             activeOpacity={0.8}
           >
-            <View style={styles.actionCardIconCircle}>
-              <ArrowDown size={24} color="#56472B" />
+            <View style={[styles.actionCardIconCircle, { backgroundColor: colors.primary }]}>
+              <ArrowDown size={24} color={colors.onPrimary} />
             </View>
-            <Text style={styles.actionCardText}>Manual</Text>
+            <Text style={[styles.actionCardText, { color: colors.primary }]}>Manual</Text>
           </TouchableOpacity>
         </View>
 
         {/* Quick Scan QR Bar */}
-        <TouchableOpacity style={styles.qrBar} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={[
+            styles.qrBar,
+            {
+              backgroundColor: colors.cardBg,
+              borderColor: colors.cardBorder,
+            },
+          ]}
+          activeOpacity={0.8}
+        >
           <View style={styles.qrBarLeft}>
-            <QrCode size={20} color="#CBB692" style={{ marginRight: 12 }} />
-            <Text style={styles.qrBarText}>Quick Scan QR</Text>
+            <QrCode size={20} color={colors.primary} style={{ marginRight: 12 }} />
+            <Text style={[styles.qrBarText, { color: colors.textSecondary }]}>Quick Scan QR</Text>
           </View>
-          <Text style={styles.qrBarChevron}>›</Text>
+          <Text style={[styles.qrBarChevron, { color: colors.primary }]}>›</Text>
         </TouchableOpacity>
 
         {/* Phone Storage Card */}
-        <View style={styles.storageCard}>
+        <View
+          style={[
+            styles.storageCard,
+            {
+              backgroundColor: colors.cardBg,
+              borderColor: colors.cardBorder,
+            },
+          ]}
+        >
           <View style={styles.storageHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Smartphone size={16} color="#BEC8C9" style={{ marginRight: 6 }} />
-              <Text style={styles.storageTitle}>Phone Storage</Text>
+              <Smartphone size={16} color={colors.textSecondary} style={{ marginRight: 6 }} />
+              <Text style={[styles.storageTitle, { color: colors.textSecondary }]}>Phone Storage</Text>
             </View>
-            <Text style={styles.storageText}>{freeStorageText}</Text>
+            <Text style={[styles.storageText, { color: colors.textSecondary }]}>{freeStorageText}</Text>
           </View>
-          <View style={styles.progressBarBg}>
-            <View style={[styles.progressBarFill, { width: `${storageRatio * 100}%` }]} />
+          <View style={[styles.progressBarBg, { backgroundColor: colors.surfaceVariant }]}>
+            <View
+              style={[
+                styles.progressBarFill,
+                {
+                  backgroundColor: colors.secondary,
+                  width: `${storageRatio * 100}%`,
+                },
+              ]}
+            />
           </View>
         </View>
 
         {/* Discovery & Nearby Devices Section */}
         {(isDiscoveryActive || deviceList.length > 0) && (
-          <View style={styles.discoverySection}>
+          <View
+            style={[
+              styles.discoverySection,
+              {
+                backgroundColor: colors.cardBg,
+                borderColor: colors.cardBorder,
+              },
+            ]}
+          >
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
                 Nearby Devices ({deviceList.length})
               </Text>
             </View>
@@ -436,12 +484,21 @@ export function HomeScreen() {
             {isDiscoveryActive && deviceList.length === 0 && (
               <View style={styles.radarContainer}>
                 <RadarAnimation active={isDiscoveryActive} />
-                <Text style={styles.scanningText}>Scanning for nearby ShareBear devices...</Text>
+                <Text style={[styles.scanningText, { color: colors.textSecondary }]}>Scanning for nearby ShareBear devices...</Text>
               </View>
             )}
 
             {deviceList.map(device => (
-              <View key={device.id} style={styles.deviceCard}>
+              <View
+                key={device.id}
+                style={[
+                  styles.deviceCard,
+                  {
+                    backgroundColor: colors.surfaceVariant,
+                    borderColor: colors.outlineVariant,
+                  },
+                ]}
+              >
                 <View
                   style={[
                     styles.platformIndicator,
@@ -454,27 +511,33 @@ export function HomeScreen() {
                 </View>
 
                 <View style={styles.deviceInfo}>
-                  <Text style={styles.deviceCardName}>{device.name}</Text>
-                  <Text style={styles.deviceDetails}>
+                  <Text style={[styles.deviceCardName, { color: colors.textPrimary }]}>{device.name}</Text>
+                  <Text style={[styles.deviceDetails, { color: colors.textSecondary }]}>
                     IP: {device.ip}:{device.port}
                   </Text>
                 </View>
 
                 <View style={styles.cardActions}>
                   <TouchableOpacity
-                    style={styles.inspectBtn}
+                    style={[
+                      styles.inspectBtn,
+                      {
+                        backgroundColor: colors.surfaceElevated,
+                        borderColor: colors.outline,
+                      },
+                    ]}
                     onPress={() => setSelectedDevice(device)}
                     activeOpacity={0.8}
                   >
-                    <Text style={styles.inspectBtnText}>Inspect</Text>
+                    <Text style={[styles.inspectBtnText, { color: colors.textSecondary }]}>Inspect</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={styles.sendBtn}
+                    style={[styles.sendBtn, { backgroundColor: colors.primary }]}
                     onPress={() => handleSendRequest(device)}
                     activeOpacity={0.8}
                   >
-                    <Text style={styles.sendBtnText}>Send Req</Text>
+                    <Text style={[styles.sendBtnText, { color: colors.onPrimary }]}>Send Req</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -485,11 +548,19 @@ export function HomeScreen() {
 
       {/* Recent Activity Section */}
       <View style={styles.activitySection}>
-        <Text style={styles.activitySectionTitle}>Recent Activity</Text>
+        <Text style={[styles.activitySectionTitle, { color: colors.textPrimary }]}>Recent Activity</Text>
         
         {transferHistoryList.length === 0 ? (
-          <View style={styles.emptyActivityContainer}>
-            <Text style={styles.emptyActivityText}>No recent transfer activity</Text>
+          <View
+            style={[
+              styles.emptyActivityContainer,
+              {
+                backgroundColor: colors.cardBg,
+                borderColor: colors.cardBorder,
+              },
+            ]}
+          >
+            <Text style={[styles.emptyActivityText, { color: colors.textSecondary }]}>No recent transfer activity</Text>
           </View>
         ) : (
           <ScrollView
@@ -516,22 +587,31 @@ export function HomeScreen() {
               }
 
               return (
-                <View key={item.transferId} style={styles.activityItem}>
-                  <View style={styles.activityIconCircle}>
-                    {iconType === 'Image' && <Image size={20} color="#BEC8C9" />}
-                    {iconType === 'Video' && <Video size={20} color="#BEC8C9" />}
-                    {iconType === 'FileText' && <FileText size={20} color="#BEC8C9" />}
+                <View
+                  key={item.transferId}
+                  style={[
+                    styles.activityItem,
+                    {
+                      backgroundColor: colors.cardBg,
+                      borderColor: colors.cardBorder,
+                    },
+                  ]}
+                >
+                  <View style={[styles.activityIconCircle, { backgroundColor: colors.surfaceVariant, borderColor: colors.cardBorder, borderWidth: 1 }]}>
+                    {iconType === 'Image' && <Image size={20} color={colors.textSecondary} />}
+                    {iconType === 'Video' && <Video size={20} color={colors.textSecondary} />}
+                    {iconType === 'FileText' && <FileText size={20} color={colors.textSecondary} />}
                   </View>
                   <View style={styles.activityInfo}>
-                    <Text style={styles.activityFileName} numberOfLines={1}>
+                    <Text style={[styles.activityFileName, { color: colors.textPrimary }]} numberOfLines={1}>
                       {fileName}
                     </Text>
-                    <Text style={styles.activityMeta}>{statusText}</Text>
+                    <Text style={[styles.activityMeta, { color: colors.textSecondary }]}>{statusText}</Text>
                   </View>
-                  {isCompleted && <CheckCircle2 size={20} color="#57B5B6" />}
-                  {isFailed && <AlertCircle size={20} color="#F87171" />}
+                  {isCompleted && <CheckCircle2 size={20} color={colors.secondary} />}
+                  {isFailed && <AlertCircle size={20} color={colors.error} />}
                   {!isCompleted && !isFailed && (
-                    <ActivityIndicator size="small" color="#57B5B6" style={{ marginLeft: 8 }} />
+                    <ActivityIndicator size="small" color={colors.secondary} style={{ marginLeft: 8 }} />
                   )}
                 </View>
               );

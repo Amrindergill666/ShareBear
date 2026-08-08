@@ -5,6 +5,7 @@ import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 import com.sharebear.network.NetworkModule
+import com.sharebear.theme.DynamicColorsModule
 
 class MyPackage : ReactPackage {
 
@@ -14,7 +15,8 @@ class MyPackage : ReactPackage {
 
         return listOf(
             MyModule(reactContext),
-            NetworkModule(reactContext)
+            NetworkModule(reactContext),
+            DynamicColorsModule(reactContext)
         )
     }
 

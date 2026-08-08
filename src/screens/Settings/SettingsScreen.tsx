@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useTheme } from '../../theme';
 
 export function SettingsScreen() {
   const {
@@ -22,6 +23,7 @@ export function SettingsScreen() {
     setPort,
     resetSettings,
   } = useSettingsStore();
+  const { colors } = useTheme();
 
   const [nameInput, setNameInput] = useState(deviceName);
   const [portInput, setPortInput] = useState(port.toString());
@@ -50,88 +52,121 @@ export function SettingsScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.title}>System Settings</Text>
-        <Text style={styles.subtitle}>Configure your device profile for local sharing</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>System Settings</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Configure your device profile for local sharing</Text>
 
         {/* Device Information Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardHeader}>Device Profile</Text>
+        <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+          <Text style={[styles.cardHeader, { color: colors.primary, borderBottomColor: colors.outlineVariant }]}>
+            Device Profile
+          </Text>
 
           <View style={styles.settingGroup}>
-            <Text style={styles.label}>Device Name</Text>
+            <Text style={[styles.label, { color: colors.textPrimary }]}>Device Name</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.surfaceVariant, borderColor: colors.outlineVariant, color: colors.textPrimary }]}
               value={nameInput}
               onChangeText={setNameInput}
               placeholder="e.g. My Phone"
-              placeholderTextColor="#64748B"
+              placeholderTextColor={colors.textMuted}
             />
-            <Text style={styles.helperText}>This name will be visible to nearby devices.</Text>
+            <Text style={[styles.helperText, { color: colors.textMuted }]}>This name will be visible to nearby devices.</Text>
           </View>
 
           <View style={styles.settingGroup}>
-            <Text style={styles.label}>Device ID (Read-only)</Text>
-            <Text style={styles.readOnlyText}>{deviceId || 'Generated on first discovery start'}</Text>
+            <Text style={[styles.label, { color: colors.textPrimary }]}>Device ID (Read-only)</Text>
+            <Text style={[styles.readOnlyText, { backgroundColor: colors.surfaceVariant, borderColor: colors.outlineVariant, color: colors.textSecondary }]}>
+              {deviceId || 'Generated on first discovery start'}
+            </Text>
           </View>
         </View>
 
         {/* Connection Configuration Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardHeader}>Connection Settings</Text>
+        <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+          <Text style={[styles.cardHeader, { color: colors.primary, borderBottomColor: colors.outlineVariant }]}>
+            Connection Settings
+          </Text>
 
           <View style={styles.settingGroup}>
-            <Text style={styles.label}>HTTP Port</Text>
+            <Text style={[styles.label, { color: colors.textPrimary }]}>HTTP Port</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.surfaceVariant, borderColor: colors.outlineVariant, color: colors.textPrimary }]}
               value={portInput}
               onChangeText={setPortInput}
               keyboardType="number-pad"
               maxLength={5}
               placeholder="53318"
-              placeholderTextColor="#64748B"
+              placeholderTextColor={colors.textMuted}
             />
-            <Text style={styles.helperText}>Port range: 1024 to 65535. Default is 53317.</Text>
+            <Text style={[styles.helperText, { color: colors.textMuted }]}>Port range: 1024 to 65535. Default is 53317.</Text>
           </View>
 
           <View style={styles.settingGroup}>
-            <Text style={styles.label}>Theme Preference</Text>
+            <Text style={[styles.label, { color: colors.textPrimary }]}>Theme Preference</Text>
             <View style={styles.themeRow}>
-              {(['light', 'dark', 'system'] as const).map((t) => (
-                <TouchableOpacity
-                  key={t}
-                  style={[
-                    styles.themeButton,
-                    theme === t && styles.themeButtonActive,
-                  ]}
-                  onPress={() => setTheme(t)}
-                >
-                  <Text
+              {(['light', 'dark', 'system'] as const).map((t) => {
+                const isActive = theme === t;
+                return (
+                  <TouchableOpacity
+                    key={t}
                     style={[
-                      styles.themeButtonText,
-                      theme === t && styles.themeButtonTextActive,
+                      styles.themeButton,
+                      {
+                        backgroundColor: isActive ? colors.primary : colors.surfaceVariant,
+                        borderColor: isActive ? colors.primary : colors.outlineVariant,
+                      },
                     ]}
+                    onPress={() => setTheme(t)}
                   >
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.themeButtonText,
+                        {
+                          color: isActive ? colors.onPrimary : colors.textSecondary,
+                          fontWeight: isActive ? 'bold' : '500',
+                        },
+                      ]}
+                    >
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
         </View>
 
         {/* Actions */}
         <View style={styles.actionsContainer}>
-          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-            <Text style={styles.saveButtonText}>
+          <TouchableOpacity
+            style={[
+              styles.saveButton,
+              {
+                backgroundColor: colors.primary,
+                shadowColor: colors.primary,
+              },
+            ]}
+            onPress={handleSave}
+          >
+            <Text style={[styles.saveButtonText, { color: colors.onPrimary }]}>
               {isSaved ? '✓ Settings Saved' : 'Save Changes'}
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
-            <Text style={styles.resetButtonText}>Reset Defaults</Text>
+          <TouchableOpacity
+            style={[
+              styles.resetButton,
+              {
+                backgroundColor: colors.surfaceVariant,
+                borderColor: colors.outlineVariant,
+              },
+            ]}
+            onPress={handleReset}
+          >
+            <Text style={[styles.resetButtonText, { color: colors.textSecondary }]}>Reset Defaults</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

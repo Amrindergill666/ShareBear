@@ -24,9 +24,11 @@ import { getDeviceId, getDeviceName, getBrand } from 'react-native-device-info';
 import { startServer } from './src/features/server/serverManager';
 import { initializeTransferManager } from './src/features/transfer/TransferManager';
 import Navbar from "./src/navtab/navbar"
+import { useTheme } from './src/theme';
 
 function AppContent() {
   const { setDeviceName, setDeviceId } = useSettingsStore();
+  const { colors, isDarkMode } = useTheme();
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -55,19 +57,28 @@ function AppContent() {
     <SafeAreaView
       style={[
         styles.container,
-        // {
-        //   paddingTop: safeAreaInsets.top,
-        // },
+        { backgroundColor: colors.background },
       ]}
     >
-      <StatusBar barStyle="light-content" backgroundColor="#051521" />
+      <StatusBar
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.background}
+      />
 
-      {/* Main Content Area */}
+      {/* Main Content Area - Instant Zero-Lag Tab Switching */}
       <View style={styles.content}>
-        {activeScreen === 'Home' && <HomeScreen />}
-        {activeScreen === 'Transfers' && <TransferHistoryScreen />}
-        {activeScreen === 'Server' && <ServerScreen />}
-        {activeScreen === 'Settings' && <SettingsScreen />}
+        <View style={[styles.screenWrapper, activeScreen !== 'Home' && styles.hiddenScreen]}>
+          <HomeScreen />
+        </View>
+        <View style={[styles.screenWrapper, activeScreen !== 'Transfers' && styles.hiddenScreen]}>
+          <TransferHistoryScreen />
+        </View>
+        <View style={[styles.screenWrapper, activeScreen !== 'Server' && styles.hiddenScreen]}>
+          <ServerScreen />
+        </View>
+        <View style={[styles.screenWrapper, activeScreen !== 'Settings' && styles.hiddenScreen]}>
+          <SettingsScreen />
+        </View>
       </View>
 
       {/* Mount the Global Incoming Dialog Overlay */}
@@ -92,10 +103,15 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#051521',
     position:'relative'
   },
   content: {
     flex: 1,
+  },
+  screenWrapper: {
+    flex: 1,
+  },
+  hiddenScreen: {
+    display: 'none',
   },
 });

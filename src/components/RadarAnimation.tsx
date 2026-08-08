@@ -1,11 +1,16 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, Animated } from 'react-native';
+import { useTheme } from '../theme';
 
 interface RadarAnimationProps {
   active: boolean;
+  color?: string;
 }
 
-export function RadarAnimation({ active }: RadarAnimationProps) {
+export function RadarAnimation({ active, color }: RadarAnimationProps) {
+  const { colors } = useTheme();
+  const pulseColor = color || colors.primary;
+
   const anim1 = useRef(new Animated.Value(0)).current;
   const anim2 = useRef(new Animated.Value(0)).current;
 
@@ -46,7 +51,7 @@ export function RadarAnimation({ active }: RadarAnimationProps) {
   if (!active) {
     return (
       <View style={styles.container}>
-        <View style={[styles.center, styles.inactiveCenter]} />
+        <View style={[styles.center, { backgroundColor: colors.textMuted, borderColor: colors.outline }]} />
       </View>
     );
   }
@@ -70,9 +75,29 @@ export function RadarAnimation({ active }: RadarAnimationProps) {
 
   return (
     <View style={styles.container}>
-      <Animated.View style={[styles.circle, getAnimatedStyle(anim1)]} />
-      <Animated.View style={[styles.circle, getAnimatedStyle(anim2)]} />
-      <View style={styles.center} />
+      <Animated.View
+        style={[
+          styles.circle,
+          { borderColor: pulseColor, backgroundColor: `${pulseColor}33` },
+          getAnimatedStyle(anim1),
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.circle,
+          { borderColor: pulseColor, backgroundColor: `${pulseColor}33` },
+          getAnimatedStyle(anim2),
+        ]}
+      />
+      <View
+        style={[
+          styles.center,
+          {
+            backgroundColor: pulseColor,
+            shadowColor: pulseColor,
+          },
+        ]}
+      />
     </View>
   );
 }
@@ -89,26 +114,17 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: 'rgba(59, 130, 246, 0.25)',
-    borderWidth: 1,
-    borderColor: '#3B82F6',
+    borderWidth: 1.5,
   },
   center: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#3B82F6',
     borderWidth: 3,
     borderColor: '#FFFFFF',
     elevation: 4,
-    shadowColor: '#3B82F6',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 6,
-  },
-  inactiveCenter: {
-    backgroundColor: '#64748B',
-    borderColor: '#94A3B8',
-    shadowColor: '#000000',
   },
 });

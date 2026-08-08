@@ -1,9 +1,11 @@
 import React from 'react';
 import { StyleSheet, View, Text, Modal } from 'react-native';
 import { useTransferStore } from '../store/transferStore';
+import { useTheme } from '../theme';
 
 export function TransferProgressDialog() {
   const { activeSession } = useTransferStore();
+  const { colors } = useTheme();
 
   if (!activeSession || activeSession.status !== 'transferring') {
     return null;
@@ -40,26 +42,34 @@ export function TransferProgressDialog() {
   return (
     <Modal animationType="fade" transparent={true} visible={true}>
       <View style={styles.overlay}>
-        <View style={styles.dialogCard}>
-          <Text style={styles.title}>
+        <View
+          style={[
+            styles.dialogCard,
+            {
+              backgroundColor: colors.surfaceElevated,
+              borderColor: colors.cardBorder,
+            },
+          ]}
+        >
+          <Text style={[styles.title, { color: colors.primary }]}>
             {direction === 'upload' ? 'Uploading' : 'Downloading'}
           </Text>
-          <Text style={styles.fileName} numberOfLines={1}>
+          <Text style={[styles.fileName, { color: colors.textPrimary }]} numberOfLines={1}>
             {fileName}
           </Text>
           
-          <Text style={styles.progressBar}>{progressBar}</Text>
+          <Text style={[styles.progressBar, { color: colors.primary }]}>{progressBar}</Text>
           
-          <Text style={styles.percentage}>{Math.round(percentage)}%</Text>
+          <Text style={[styles.percentage, { color: colors.textPrimary }]}>{Math.round(percentage)}%</Text>
           
-          <View style={styles.statsRow}>
+          <View style={[styles.statsRow, { borderTopColor: colors.outlineVariant }]}>
             <View style={styles.statCol}>
-              <Text style={styles.statLabel}>Speed</Text>
-              <Text style={styles.statValue}>{formatSpeed(speed)}</Text>
+              <Text style={[styles.statLabel, { color: colors.textMuted }]}>Speed</Text>
+              <Text style={[styles.statValue, { color: colors.textPrimary }]}>{formatSpeed(speed)}</Text>
             </View>
             <View style={[styles.statCol, styles.alignRight]}>
-              <Text style={styles.statLabel}>Remaining</Text>
-              <Text style={styles.statValue}>{formatEta(eta)}</Text>
+              <Text style={[styles.statLabel, { color: colors.textMuted }]}>Remaining</Text>
+              <Text style={[styles.statValue, { color: colors.textPrimary }]}>{formatEta(eta)}</Text>
             </View>
           </View>
         </View>

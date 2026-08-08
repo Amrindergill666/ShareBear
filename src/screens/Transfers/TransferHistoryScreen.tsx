@@ -12,6 +12,7 @@ import { useTransferStore } from '../../store/transferStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { TransferRepository } from '../../features/transfer/TransferRepository';
 import { Transfer } from '../../features/transfer/models';
+import { useTheme } from '../../theme';
 import {
   Menu,
   Bell,
@@ -33,6 +34,7 @@ type FilterType = 'ALL' | 'SENT' | 'RECEIVED';
 export function TransferHistoryScreen() {
   const { transfers, setTransfers } = useTransferStore();
   const { deviceId } = useSettingsStore();
+  const { colors } = useTheme();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('ALL');
@@ -81,8 +83,8 @@ export function TransferHistoryScreen() {
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(ext)) {
       return {
-        icon: <FolderArchive size={22} color="#57B5B6" />,
-        bgColor: '#0F2938',
+        icon: <FolderArchive size={22} color={colors.secondary} />,
+        bgColor: `${colors.secondary}22`,
       };
     }
     if (
@@ -90,8 +92,8 @@ export function TransferHistoryScreen() {
       mime.startsWith('image/')
     ) {
       return {
-        icon: <ImageIcon size={22} color="#57B5B6" />,
-        bgColor: '#0F2938',
+        icon: <ImageIcon size={22} color={colors.secondary} />,
+        bgColor: `${colors.secondary}22`,
       };
     }
     if (
@@ -99,8 +101,8 @@ export function TransferHistoryScreen() {
       mime.startsWith('video/')
     ) {
       return {
-        icon: <VideoIcon size={22} color="#CBB692" />,
-        bgColor: '#242018',
+        icon: <VideoIcon size={22} color={colors.primary} />,
+        bgColor: `${colors.primary}22`,
       };
     }
     if (
@@ -108,8 +110,8 @@ export function TransferHistoryScreen() {
       mime.startsWith('audio/')
     ) {
       return {
-        icon: <Music size={22} color="#A78BFA" />,
-        bgColor: '#1E1B3A',
+        icon: <Music size={22} color={colors.tertiary} />,
+        bgColor: `${colors.tertiary}22`,
       };
     }
     if (
@@ -117,13 +119,13 @@ export function TransferHistoryScreen() {
       mime.startsWith('text/')
     ) {
       return {
-        icon: <FileText size={22} color="#CBD5E1" />,
-        bgColor: '#162534',
+        icon: <FileText size={22} color={colors.textSecondary} />,
+        bgColor: colors.surfaceVariant,
       };
     }
     return {
-      icon: <File size={22} color="#94A3B8" />,
-      bgColor: '#142635',
+      icon: <File size={22} color={colors.textSecondary} />,
+      bgColor: colors.surfaceVariant,
     };
   };
 
@@ -178,25 +180,33 @@ export function TransferHistoryScreen() {
   const totalTransfersCount = Object.keys(transfers).length;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Top Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerButton} activeOpacity={0.7}>
-          <Menu size={24} color="#BEC8C9" />
+          <Menu size={24} color={colors.textSecondary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>ShareBear</Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>ShareBear</Text>
         <TouchableOpacity style={styles.headerButton} activeOpacity={0.7}>
-          <Bell size={24} color="#BEC8C9" />
+          <Bell size={24} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
       {/* Search Bar */}
-      <View style={styles.searchBarContainer}>
-        <Search size={20} color="#64748B" style={styles.searchIcon} />
+      <View
+        style={[
+          styles.searchBarContainer,
+          {
+            backgroundColor: colors.cardBg,
+            borderColor: colors.cardBorder,
+          },
+        ]}
+      >
+        <Search size={20} color={colors.textMuted} style={styles.searchIcon} />
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { color: colors.textPrimary }]}
           placeholder="Search history..."
-          placeholderTextColor="#64748B"
+          placeholderTextColor={colors.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
           autoCapitalize="none"
@@ -208,7 +218,7 @@ export function TransferHistoryScreen() {
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={styles.clearSearchBtn}
           >
-            <X size={16} color="#94A3B8" />
+            <X size={16} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
       </View>
@@ -221,14 +231,23 @@ export function TransferHistoryScreen() {
           return (
             <TouchableOpacity
               key={tab}
-              style={[styles.filterChip, isActive && styles.filterChipActive]}
+              style={[
+                styles.filterChip,
+                {
+                  backgroundColor: isActive ? colors.primary : colors.cardBg,
+                  borderColor: isActive ? colors.primary : colors.cardBorder,
+                },
+              ]}
               onPress={() => setActiveFilter(tab)}
               activeOpacity={0.8}
             >
               <Text
                 style={[
                   styles.filterChipText,
-                  isActive && styles.filterChipTextActive,
+                  {
+                    color: isActive ? colors.onPrimary : colors.textSecondary,
+                    fontWeight: isActive ? 'bold' : '500',
+                  },
                 ]}
               >
                 {label}
@@ -244,15 +263,23 @@ export function TransferHistoryScreen() {
           contentContainerStyle={styles.emptyContainer}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.emptyIconCircle}>
-            <Search size={32} color="#475569" />
+          <View
+            style={[
+              styles.emptyIconCircle,
+              {
+                backgroundColor: colors.cardBg,
+                borderColor: colors.cardBorder,
+              },
+            ]}
+          >
+            <Search size={32} color={colors.textMuted} />
           </View>
-          <Text style={styles.emptyTitle}>
+          <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
             {totalTransfersCount === 0
               ? 'No transfers recorded yet'
               : 'No matching transfers'}
           </Text>
-          <Text style={styles.emptySubtext}>
+          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
             {totalTransfersCount === 0
               ? 'Incoming and outgoing file request logs will appear here.'
               : 'Try searching for another filename or clear the filter.'}
@@ -266,7 +293,7 @@ export function TransferHistoryScreen() {
         >
           {groupKeys.map((groupKey) => (
             <View key={groupKey} style={styles.groupSection}>
-              <Text style={styles.groupTitle}>{groupKey}</Text>
+              <Text style={[styles.groupTitle, { color: colors.textSecondary }]}>{groupKey}</Text>
               {groupedTransfers[groupKey].map((transfer) => {
                 const isOutgoing =
                   transfer.transferId.startsWith('TR-OUT-') ||
@@ -286,18 +313,27 @@ export function TransferHistoryScreen() {
                   : `Received from ${transfer.senderName || 'Peer'}`;
 
                 return (
-                  <View key={transfer.transferId} style={styles.card}>
+                  <View
+                    key={transfer.transferId}
+                    style={[
+                      styles.card,
+                      {
+                        backgroundColor: colors.cardBg,
+                        borderColor: colors.cardBorder,
+                      },
+                    ]}
+                  >
                     {/* File Icon */}
-                    <View style={[styles.fileIconContainer, { backgroundColor: bgColor }]}>
+                    <View style={[styles.fileIconContainer, { backgroundColor: bgColor, borderColor: colors.cardBorder, borderWidth: 1 }]}>
                       {icon}
                     </View>
 
                     {/* Transfer Info */}
                     <View style={styles.cardContent}>
-                      <Text style={styles.fileName} numberOfLines={1}>
+                      <Text style={[styles.fileName, { color: colors.textPrimary }]} numberOfLines={1}>
                         {fileName}
                       </Text>
-                      <Text style={styles.subDetails} numberOfLines={1}>
+                      <Text style={[styles.subDetails, { color: colors.textSecondary }]} numberOfLines={1}>
                         {targetPeer}  •  {formatSize(transfer.totalBytes)}
                       </Text>
                     </View>
@@ -305,17 +341,17 @@ export function TransferHistoryScreen() {
                     {/* Status & Timestamp */}
                     <View style={styles.cardRight}>
                       {isCompleted ? (
-                        <CheckCircle2 size={20} color="#57B5B6" />
+                        <CheckCircle2 size={20} color={colors.secondary} />
                       ) : isFailed ? (
-                        <AlertCircle size={20} color="#F87171" />
+                        <AlertCircle size={20} color={colors.error} />
                       ) : (
-                        <ActivityIndicator size="small" color="#57B5B6" />
+                        <ActivityIndicator size="small" color={colors.secondary} />
                       )}
 
                       <Text
                         style={[
                           styles.timeText,
-                          isFailed && styles.failedTimeText,
+                          { color: isFailed ? colors.error : colors.textSecondary },
                         ]}
                       >
                         {isFailed ? 'Failed' : formatTime(transfer.createdAt)}

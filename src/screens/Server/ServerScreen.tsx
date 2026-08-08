@@ -9,9 +9,11 @@ import {
 } from 'react-native';
 import { useServerStore } from '../../store/serverStore';
 import { startServer, stopServer, updateServerStats } from '../../features/server/serverManager';
+import { useTheme } from '../../theme';
 
 export function ServerScreen() {
   const { isRunning, port, requestsReceived, lastRequestIp, uptime } = useServerStore();
+  const { colors } = useTheme();
 
   // Poll server stats every 2 seconds to keep uptime and metrics updated dynamically
   useEffect(() => {
@@ -55,75 +57,90 @@ export function ServerScreen() {
   ];
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      <Text style={styles.title}>Control Server</Text>
-      <Text style={styles.subtitle}>Enables direct peer-to-peer HTTP communications</Text>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={styles.scrollContent}
+    >
+      <Text style={[styles.title, { color: colors.textPrimary }]}>Control Server</Text>
+      <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Enables direct peer-to-peer HTTP communications</Text>
 
       {/* Server Status Panel */}
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
         <View style={styles.statusRow}>
-          <Text style={styles.statusLabel}>Server Status</Text>
+          <Text style={[styles.statusLabel, { color: colors.textPrimary }]}>Server Status</Text>
           <View
             style={[
               styles.statusBadge,
-              isRunning ? styles.statusBadgeRunning : styles.statusBadgeStopped,
+              isRunning
+                ? { backgroundColor: `${colors.success}20` }
+                : { backgroundColor: `${colors.error}20` },
             ]}
           >
             <View
               style={[
                 styles.statusDot,
-                isRunning ? styles.statusDotRunning : styles.statusDotStopped,
+                isRunning ? { backgroundColor: colors.success } : { backgroundColor: colors.error },
               ]}
             />
-            <Text style={[styles.statusText, isRunning ? styles.statusTextRunning : styles.statusTextStopped]}>
+            <Text
+              style={[
+                styles.statusText,
+                { color: isRunning ? colors.success : colors.error },
+              ]}
+            >
               {isRunning ? 'RUNNING' : 'STOPPED'}
             </Text>
           </View>
         </View>
 
         <View style={styles.statsGrid}>
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Port</Text>
-            <Text style={styles.statValue}>{isRunning ? port : '—'}</Text>
+          <View style={[styles.statBox, { backgroundColor: colors.surfaceVariant, borderColor: colors.outlineVariant }]}>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Port</Text>
+            <Text style={[styles.statValue, { color: colors.textPrimary }]}>{isRunning ? port : '—'}</Text>
           </View>
 
-          <View style={styles.statBox}>
-            <Text style={styles.statLabel}>Uptime</Text>
-            <Text style={styles.statValue}>{isRunning ? formatUptime(uptime) : '—'}</Text>
+          <View style={[styles.statBox, { backgroundColor: colors.surfaceVariant, borderColor: colors.outlineVariant }]}>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>Uptime</Text>
+            <Text style={[styles.statValue, { color: colors.textPrimary }]}>{isRunning ? formatUptime(uptime) : '—'}</Text>
           </View>
         </View>
       </View>
 
       {/* Metrics Panel */}
-      <View style={styles.card}>
-        <Text style={styles.cardHeader}>Server Metrics</Text>
+      <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+        <Text style={[styles.cardHeader, { color: colors.primary, borderBottomColor: colors.outlineVariant }]}>
+          Server Metrics
+        </Text>
 
         <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>Total Requests Received</Text>
-          <Text style={styles.metricValueText}>{requestsReceived}</Text>
+          <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Total Requests Received</Text>
+          <Text style={[styles.metricValueText, { color: colors.textPrimary }]}>{requestsReceived}</Text>
         </View>
 
         <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>Last Request IP</Text>
-          <Text style={styles.metricValueTextIp}>{lastRequestIp}</Text>
+          <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Last Request IP</Text>
+          <Text style={[styles.metricValueTextIp, { color: colors.secondary }]}>{lastRequestIp}</Text>
         </View>
       </View>
 
       {/* API Endpoints Catalog */}
-      <View style={styles.card}>
-        <Text style={styles.cardHeader}>Active API Endpoints</Text>
+      <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+        <Text style={[styles.cardHeader, { color: colors.primary, borderBottomColor: colors.outlineVariant }]}>
+          Active API Endpoints
+        </Text>
         {endpoints.map((endpoint, index) => (
           <View
             key={endpoint.path}
             style={[
               styles.endpointRow,
+              { borderBottomColor: colors.outlineVariant },
               index === endpoints.length - 1 && { borderBottomWidth: 0 },
             ]}
           >
-            <View style={styles.endpointPathBadge}>
-              <Text style={styles.endpointPath}>GET {endpoint.path}</Text>
+            <View style={[styles.endpointPathBadge, { backgroundColor: colors.surfaceVariant, borderColor: colors.outlineVariant }]}>
+              <Text style={[styles.endpointPath, { color: colors.primary }]}>GET {endpoint.path}</Text>
             </View>
-            <Text style={styles.endpointDesc}>{endpoint.desc}</Text>
+            <Text style={[styles.endpointDesc, { color: colors.textSecondary }]}>{endpoint.desc}</Text>
           </View>
         ))}
       </View>
@@ -132,11 +149,14 @@ export function ServerScreen() {
       <TouchableOpacity
         style={[
           styles.actionButton,
-          isRunning ? styles.actionButtonActive : styles.actionButtonInactive,
+          {
+            backgroundColor: isRunning ? colors.error : colors.primary,
+            shadowColor: isRunning ? colors.error : colors.primary,
+          },
         ]}
         onPress={handleToggleServer}
       >
-        <Text style={styles.actionButtonText}>
+        <Text style={[styles.actionButtonText, { color: isRunning ? '#FFFFFF' : colors.onPrimary }]}>
           {isRunning ? 'Stop Server' : 'Start Server'}
         </Text>
       </TouchableOpacity>
