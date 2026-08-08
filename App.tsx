@@ -13,6 +13,7 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import { HomeScreen } from './src/screens/Home/HomeScreen';
+import { NearbyScreen } from './src/screens/Nearby/NearbyScreen';
 import { ServerScreen } from './src/screens/Server/ServerScreen';
 import { SettingsScreen } from './src/screens/Settings/SettingsScreen';
 import { TransferHistoryScreen } from './src/screens/Transfers/TransferHistoryScreen';
@@ -73,8 +74,8 @@ function AppContent() {
         <View style={[styles.screenWrapper, activeScreen !== 'Transfers' && styles.hiddenScreen]}>
           <TransferHistoryScreen />
         </View>
-        <View style={[styles.screenWrapper, activeScreen !== 'Server' && styles.hiddenScreen]}>
-          <ServerScreen />
+        <View style={[styles.screenWrapper, (activeScreen !== 'Nearby' && activeScreen !== 'Server') && styles.hiddenScreen]}>
+          <NearbyScreen />
         </View>
         <View style={[styles.screenWrapper, activeScreen !== 'Settings' && styles.hiddenScreen]}>
           <SettingsScreen />

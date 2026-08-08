@@ -5,8 +5,8 @@ import { useTheme } from '../theme';
 import {
   House,
   Clock,
-  SmartphoneNfc,
   MonitorSpeaker,
+  Radio
 } from 'lucide-react-native';
 
 const TAB_WIDTH = 86;
@@ -36,8 +36,8 @@ const Navbar = ({ safeAreaInsets }) => {
     },
     {
       name: 'Nearby',
-      screen: 'Server',
-      icon: SmartphoneNfc,
+      screen: 'Nearby',
+      icon: Radio,
     },
     {
       name: 'Devices',
