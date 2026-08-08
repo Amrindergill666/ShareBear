@@ -41,7 +41,7 @@ const Navbar = ({ safeAreaInsets }) => {
     },
     {
       name: 'Devices',
-      screen: 'Settings',
+      screen: 'Devices',
       icon: MonitorSpeaker,
     },
   ];
