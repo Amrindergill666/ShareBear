@@ -25,6 +25,10 @@ export const initializeTransferManager = () => {
     transferSubscription.remove();
   }
 
+  // 3. Start listening to file streaming progress events
+  const { ProgressEmitter } = require('../../services/stream/ProgressEmitter');
+  ProgressEmitter.startListening();
+
   transferSubscription = NetworkEventEmitter.addListener('TransferRequestReceived', (event) => {
     const { transferId, body } = event;
     console.log('[TransferManager] Incoming transfer request received:', transferId);
@@ -137,8 +141,44 @@ export const startOutgoingTransfer = async (
     const response = await sendTransferRequest(peerIp, peerPort, payload);
     
     if (response.accepted && response.transferId) {
-      TransferStateMachine.transition(transferId, 'ACCEPTED');
-      return response.transferId;
+      const serverTransferId = response.transferId;
+
+      // Swap the temporary transfer ID with the server-returned transferId
+      const tempTransfer = useTransferStore.getState().transfers[transferId];
+      if (tempTransfer) {
+        const updatedTransfer: Transfer = {
+          ...tempTransfer,
+          transferId: serverTransferId,
+          status: 'ACCEPTED',
+        };
+        
+        TransferRepository.deleteTransfer(transferId);
+        useTransferStore.getState().removeTransfer(transferId);
+        
+        useTransferStore.getState().addTransfer(updatedTransfer);
+        TransferRepository.saveTransfer(updatedTransfer);
+      }
+
+      TransferStateMachine.transition(serverTransferId, 'ACCEPTED');
+
+      // Start streaming upload of the file
+      const file = files[0];
+      if (file && file.uri) {
+        const { UploadManager } = require('../../services/stream/UploadManager');
+        UploadManager.startUpload(
+          serverTransferId,
+          file.uri,
+          peerIp,
+          peerPort,
+          file.name,
+          file.size,
+          file.mime
+        ).catch((err: any) => {
+          console.error('[TransferManager] Stream upload failed:', err);
+        });
+      }
+
+      return serverTransferId;
     } else {
       TransferStateMachine.transition(transferId, 'REJECTED');
       throw new Error(response.reason || 'USER_DECLINED');

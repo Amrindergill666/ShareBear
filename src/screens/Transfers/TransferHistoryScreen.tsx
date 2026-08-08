@@ -1,21 +1,41 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   ScrollView,
+  TextInput,
   TouchableOpacity,
-  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useTransferStore } from '../../store/transferStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { TransferRepository } from '../../features/transfer/TransferRepository';
+import { Transfer } from '../../features/transfer/models';
+import {
+  Menu,
+  Bell,
+  Search,
+  Image as ImageIcon,
+  Video as VideoIcon,
+  FileText,
+  FolderArchive,
+  Music,
+  File,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  Trash2,
+} from 'lucide-react-native';
+
+type FilterType = 'ALL' | 'SENT' | 'RECEIVED';
 
 export function TransferHistoryScreen() {
   const { transfers, setTransfers } = useTransferStore();
+  const { deviceId } = useSettingsStore();
 
-  const sortedTransfers = Object.values(transfers).sort(
-    (a, b) => b.createdAt - a.createdAt
-  );
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('ALL');
 
   const formatSize = (bytes: number): string => {
     if (bytes <= 0) return '0 B';
@@ -25,9 +45,86 @@ export function TransferHistoryScreen() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  const formatDate = (timestamp: number): string => {
+  const formatTime = (timestamp: number): string => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' • ' + date.toLocaleDateString();
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getGroupTitle = (timestamp: number): string => {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+
+    if (
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+    ) {
+      return 'Today';
+    }
+    if (
+      date.getDate() === yesterday.getDate() &&
+      date.getMonth() === yesterday.getMonth() &&
+      date.getFullYear() === yesterday.getFullYear()
+    ) {
+      return 'Yesterday';
+    }
+    return date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
+    });
+  };
+
+  const getFileIcon = (fileName: string, mime: string = '') => {
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(ext)) {
+      return {
+        icon: <FolderArchive size={22} color="#57B5B6" />,
+        bgColor: '#0F2938',
+      };
+    }
+    if (
+      ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'heic'].includes(ext) ||
+      mime.startsWith('image/')
+    ) {
+      return {
+        icon: <ImageIcon size={22} color="#57B5B6" />,
+        bgColor: '#0F2938',
+      };
+    }
+    if (
+      ['mp4', 'mkv', 'mov', 'avi', 'webm', '3gp'].includes(ext) ||
+      mime.startsWith('video/')
+    ) {
+      return {
+        icon: <VideoIcon size={22} color="#CBB692" />,
+        bgColor: '#242018',
+      };
+    }
+    if (
+      ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg'].includes(ext) ||
+      mime.startsWith('audio/')
+    ) {
+      return {
+        icon: <Music size={22} color="#A78BFA" />,
+        bgColor: '#1E1B3A',
+      };
+    }
+    if (
+      ['pdf', 'doc', 'docx', 'txt', 'rtf', 'csv', 'xlsx', 'json', 'md', 'xml'].includes(ext) ||
+      mime.startsWith('text/')
+    ) {
+      return {
+        icon: <FileText size={22} color="#CBD5E1" />,
+        bgColor: '#162534',
+      };
+    }
+    return {
+      icon: <File size={22} color="#94A3B8" />,
+      bgColor: '#142635',
+    };
   };
 
   const handleClearHistory = () => {
@@ -35,44 +132,130 @@ export function TransferHistoryScreen() {
     setTransfers({});
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'ACCEPTED':
-      case 'COMPLETED':
-        return '#10B981'; // Emerald
-      case 'REJECTED':
-      case 'FAILED':
-        return '#F43F5E'; // Rose
-      case 'REQUESTED':
-      case 'WAITING_FOR_USER':
-      default:
-        return '#F59E0B'; // Amber
+  // Filter & Group transfers
+  const groupedTransfers = useMemo(() => {
+    const list = Object.values(transfers).sort((a, b) => b.createdAt - a.createdAt);
+
+    const filtered = list.filter((item) => {
+      const isOutgoing =
+        item.transferId.startsWith('TR-OUT-') || item.senderId === deviceId;
+
+      // Filter Tab Check
+      if (activeFilter === 'SENT' && !isOutgoing) return false;
+      if (activeFilter === 'RECEIVED' && isOutgoing) return false;
+
+      // Search Query Check
+      if (searchQuery.trim().length > 0) {
+        const query = searchQuery.toLowerCase().trim();
+        const hasMatchingFile = item.files.some((f) =>
+          f.name.toLowerCase().includes(query)
+        );
+        const hasMatchingSender = item.senderName?.toLowerCase().includes(query);
+        const hasMatchingId = item.transferId.toLowerCase().includes(query);
+
+        if (!hasMatchingFile && !hasMatchingSender && !hasMatchingId) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    // Group by Date label
+    const groups: { [key: string]: Transfer[] } = {};
+    for (const item of filtered) {
+      const groupKey = getGroupTitle(item.createdAt);
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      groups[groupKey].push(item);
     }
-  };
+
+    return groups;
+  }, [transfers, activeFilter, searchQuery, deviceId]);
+
+  const groupKeys = Object.keys(groupedTransfers);
+  const totalTransfersCount = Object.keys(transfers).length;
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <View>
-          <Text style={styles.title}>Transfers</Text>
-          <Text style={styles.subtitle}>History of file handshakes</Text>
-        </View>
-        {sortedTransfers.length > 0 && (
+      {/* Top Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.headerButton} activeOpacity={0.7}>
+          <Menu size={24} color="#BEC8C9" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>ShareBear</Text>
+        <TouchableOpacity style={styles.headerButton} activeOpacity={0.7}>
+          <Bell size={24} color="#BEC8C9" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchBarContainer}>
+        <Search size={20} color="#64748B" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search history..."
+          placeholderTextColor="#64748B"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {searchQuery.length > 0 && (
           <TouchableOpacity
-            style={styles.clearButton}
-            onPress={handleClearHistory}
+            onPress={() => setSearchQuery('')}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.clearSearchBtn}
           >
-            <Text style={styles.clearButtonText}>Clear</Text>
+            <X size={16} color="#94A3B8" />
           </TouchableOpacity>
         )}
       </View>
 
-      {sortedTransfers.length === 0 ? (
-        <ScrollView contentContainerStyle={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>📦</Text>
-          <Text style={styles.emptyText}>No transfers recorded yet</Text>
+      {/* Filter Tabs */}
+      <View style={styles.filterRow}>
+        {(['ALL', 'SENT', 'RECEIVED'] as FilterType[]).map((tab) => {
+          const isActive = activeFilter === tab;
+          const label = tab === 'ALL' ? 'All' : tab === 'SENT' ? 'Sent' : 'Received';
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.filterChip, isActive && styles.filterChipActive]}
+              onPress={() => setActiveFilter(tab)}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  isActive && styles.filterChipTextActive,
+                ]}
+              >
+                {label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Main List Area */}
+      {groupKeys.length === 0 ? (
+        <ScrollView
+          contentContainerStyle={styles.emptyContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.emptyIconCircle}>
+            <Search size={32} color="#475569" />
+          </View>
+          <Text style={styles.emptyTitle}>
+            {totalTransfersCount === 0
+              ? 'No transfers recorded yet'
+              : 'No matching transfers'}
+          </Text>
           <Text style={styles.emptySubtext}>
-            Incoming and outgoing file request logs will appear here.
+            {totalTransfersCount === 0
+              ? 'Incoming and outgoing file request logs will appear here.'
+              : 'Try searching for another filename or clear the filter.'}
           </Text>
         </ScrollView>
       ) : (
@@ -81,56 +264,68 @@ export function TransferHistoryScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {sortedTransfers.map((transfer) => {
-            const isOutgoing = transfer.transferId.startsWith('TR-OUT-');
-            const statusColor = getStatusColor(transfer.status);
-            const firstFileName = transfer.files[0]?.name || 'Unknown File';
+          {groupKeys.map((groupKey) => (
+            <View key={groupKey} style={styles.groupSection}>
+              <Text style={styles.groupTitle}>{groupKey}</Text>
+              {groupedTransfers[groupKey].map((transfer) => {
+                const isOutgoing =
+                  transfer.transferId.startsWith('TR-OUT-') ||
+                  transfer.senderId === deviceId;
+                const firstFile = transfer.files[0];
+                const fileName = firstFile?.name || 'Unknown File';
+                const fileMime = firstFile?.mime || '';
+                const { icon, bgColor } = getFileIcon(fileName, fileMime);
 
-            return (
-              <View key={transfer.transferId} style={styles.transferCard}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.directionRow}>
-                    <Text style={styles.directionIcon}>
-                      {isOutgoing ? '📤' : '📥'}
-                    </Text>
-                    <View>
-                      <Text style={styles.directionText}>
-                        {isOutgoing ? `To Peer` : `From ${transfer.senderName}`}
+                const isCompleted =
+                  transfer.status === 'COMPLETED' || transfer.status === 'ACCEPTED';
+                const isFailed =
+                  transfer.status === 'FAILED' || transfer.status === 'REJECTED';
+
+                const targetPeer = isOutgoing
+                  ? `Sent to ${transfer.receiverId ? transfer.receiverId : 'Peer'}`
+                  : `Received from ${transfer.senderName || 'Peer'}`;
+
+                return (
+                  <View key={transfer.transferId} style={styles.card}>
+                    {/* File Icon */}
+                    <View style={[styles.fileIconContainer, { backgroundColor: bgColor }]}>
+                      {icon}
+                    </View>
+
+                    {/* Transfer Info */}
+                    <View style={styles.cardContent}>
+                      <Text style={styles.fileName} numberOfLines={1}>
+                        {fileName}
                       </Text>
-                      <Text style={styles.timestampText}>
-                        {formatDate(transfer.createdAt)}
+                      <Text style={styles.subDetails} numberOfLines={1}>
+                        {targetPeer}  •  {formatSize(transfer.totalBytes)}
+                      </Text>
+                    </View>
+
+                    {/* Status & Timestamp */}
+                    <View style={styles.cardRight}>
+                      {isCompleted ? (
+                        <CheckCircle2 size={20} color="#57B5B6" />
+                      ) : isFailed ? (
+                        <AlertCircle size={20} color="#F87171" />
+                      ) : (
+                        <ActivityIndicator size="small" color="#57B5B6" />
+                      )}
+
+                      <Text
+                        style={[
+                          styles.timeText,
+                          isFailed && styles.failedTimeText,
+                        ]}
+                      >
+                        {isFailed ? 'Failed' : formatTime(transfer.createdAt)}
                       </Text>
                     </View>
                   </View>
-
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: `${statusColor}1A`, borderColor: `${statusColor}33` },
-                    ]}
-                  >
-                    <Text style={[styles.statusText, { color: statusColor }]}>
-                      {transfer.status}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.cardBody}>
-                  <Text style={styles.fileName} numberOfLines={1}>
-                    {firstFileName}
-                    {transfer.totalFiles > 1 &&
-                      ` and ${transfer.totalFiles - 1} other${transfer.totalFiles > 2 ? 's' : ''}`}
-                  </Text>
-                  <Text style={styles.fileDetails}>
-                    {transfer.totalFiles === 1 ? '1 File' : `${transfer.totalFiles} Files`} •{' '}
-                    {formatSize(transfer.totalBytes)}
-                  </Text>
-                </View>
-
-                <Text style={styles.transferIdText}>ID: {transfer.transferId}</Text>
-              </View>
-            );
-          })}
+                );
+              })}
+            </View>
+          ))}
         </ScrollView>
       )}
     </View>
@@ -140,128 +335,172 @@ export function TransferHistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
-    padding: 20,
+    backgroundColor: '#051521',
+    paddingTop: 12,
   },
-  headerRow: {
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#F8FAFC',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
     marginBottom: 4,
   },
-  subtitle: {
-    fontSize: 14,
-    color: '#94A3B8',
-  },
-  clearButton: {
-    backgroundColor: 'rgba(244, 63, 94, 0.1)',
+  headerButton: {
+    padding: 6,
     borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 0.5,
-    borderColor: 'rgba(244, 63, 94, 0.3)',
   },
-  clearButtonText: {
-    color: '#F43F5E',
-    fontSize: 12,
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#F8FAFC',
+    letterSpacing: 0.3,
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0D2132',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    height: 50,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(63, 73, 83, 0.25)',
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    color: '#F8FAFC',
+    fontSize: 15,
+    paddingVertical: 0,
+  },
+  clearSearchBtn: {
+    padding: 4,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  filterChip: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#0A1D2B',
+    borderWidth: 1,
+    borderColor: 'rgba(63, 73, 83, 0.4)',
+  },
+  filterChipActive: {
+    backgroundColor: '#7CD5D6',
+    borderColor: '#7CD5D6',
+  },
+  filterChipText: {
+    color: '#F8FAFC',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  filterChipTextActive: {
+    color: '#051521',
     fontWeight: 'bold',
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 110,
+  },
+  groupSection: {
+    marginBottom: 20,
+  },
+  groupTitle: {
+    color: '#BEC8C9',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0D2132',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(63, 73, 83, 0.25)',
+  },
+  fileIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cardContent: {
+    flex: 1,
+    marginLeft: 14,
+    marginRight: 10,
+    justifyContent: 'center',
+  },
+  fileName: {
+    color: '#F8FAFC',
+    fontSize: 15,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  subDetails: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  cardRight: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  timeText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 4,
+  },
+  failedTimeText: {
+    color: '#F87171',
+    fontWeight: '600',
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
+    paddingBottom: 110,
   },
-  emptyIcon: {
-    fontSize: 48,
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#0D2132',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(63, 73, 83, 0.25)',
   },
-  emptyText: {
-    fontSize: 16,
+  emptyTitle: {
+    fontSize: 17,
     fontWeight: 'bold',
     color: '#E2E8F0',
     marginBottom: 6,
+    textAlign: 'center',
   },
   emptySubtext: {
     fontSize: 13,
-    color: '#475569',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  transferCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#334155',
-    paddingBottom: 10,
-    marginBottom: 12,
-  },
-  directionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  directionIcon: {
-    fontSize: 22,
-    marginRight: 10,
-  },
-  directionText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#F8FAFC',
-  },
-  timestampText: {
-    fontSize: 11,
     color: '#64748B',
-    marginTop: 2,
-  },
-  statusBadge: {
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 0.5,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  cardBody: {
-    marginBottom: 10,
-  },
-  fileName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#E2E8F0',
-    marginBottom: 4,
-  },
-  fileDetails: {
-    fontSize: 12,
-    color: '#94A3B8',
-  },
-  transferIdText: {
-    fontSize: 9,
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
-    color: '#475569',
-    textAlign: 'right',
+    textAlign: 'center',
+    lineHeight: 19,
   },
 });

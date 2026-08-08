@@ -29,6 +29,7 @@ class NetworkModule(private val reactContext: ReactApplicationContext) :
             server?.stop()
 
             val newServer = HttpServer(
+                context = reactContext,
                 port = port,
                 deviceId = deviceId,
                 deviceName = deviceName,
@@ -47,6 +48,30 @@ class NetworkModule(private val reactContext: ReactApplicationContext) :
                         putString("lastRequestIp", lastIp)
                     }
                     emitEvent("ServerStatsUpdated", map)
+                },
+                onDownloadProgress = { transferId, bytesReceived, totalBytes ->
+                    val map = Arguments.createMap().apply {
+                        putString("transferId", transferId)
+                        putDouble("bytesSent", bytesReceived.toDouble())
+                        putDouble("totalBytes", totalBytes.toDouble())
+                        putString("direction", "download")
+                    }
+                    emitEvent("TransferProgress", map)
+                },
+                onDownloadComplete = { transferId, filePath, fileSize ->
+                    val map = Arguments.createMap().apply {
+                        putString("transferId", transferId)
+                        putString("filePath", filePath)
+                        putDouble("fileSize", fileSize.toDouble())
+                    }
+                    emitEvent("TransferSuccess", map)
+                },
+                onDownloadError = { transferId, error ->
+                    val map = Arguments.createMap().apply {
+                        putString("transferId", transferId)
+                        putString("error", error)
+                    }
+                    emitEvent("TransferError", map)
                 }
             )
             newServer.start()
@@ -55,6 +80,94 @@ class NetworkModule(private val reactContext: ReactApplicationContext) :
         } catch (e: Exception) {
             promise.reject("START_SERVER_ERROR", e.message, e)
         }
+    }
+
+    /**
+     * Streams a local file to the receiver over HTTP POST in 64 KB chunks.
+     */
+    @ReactMethod
+    fun startUpload(
+        transferId: String,
+        fileUri: String,
+        peerIp: String,
+        peerPort: Int,
+        fileName: String,
+        fileSize: Double,
+        mimeType: String,
+        promise: Promise
+    ) {
+        val size = fileSize.toLong()
+        Thread {
+            try {
+                val url = java.net.URL("http://$peerIp:$peerPort/transfer/$transferId/file")
+                val connection = url.openConnection() as java.net.HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.setChunkedStreamingMode(64 * 1024)
+                connection.connectTimeout = 10000
+                connection.readTimeout = 60000
+
+                connection.setRequestProperty("Content-Type", "application/octet-stream")
+                connection.setRequestProperty("X-File-Name", fileName)
+                connection.setRequestProperty("X-File-Size", size.toString())
+                connection.setRequestProperty("X-Mime-Type", mimeType)
+
+                val outputStream = connection.outputStream
+                val fileInputStream = reactContext.contentResolver.openInputStream(android.net.Uri.parse(fileUri))
+                    ?: throw java.io.FileNotFoundException("Could not open file URI: $fileUri")
+
+                val buffer = ByteArray(64 * 1024)
+                var bytesRead: Int
+                var totalBytesSent: Long = 0
+
+                while (true) {
+                    bytesRead = fileInputStream.read(buffer)
+                    if (bytesRead == -1) break
+                    outputStream.write(buffer, 0, bytesRead)
+                    totalBytesSent += bytesRead
+
+                    // Emit progress
+                    val map = Arguments.createMap().apply {
+                        putString("transferId", transferId)
+                        putDouble("bytesSent", totalBytesSent.toDouble())
+                        putDouble("totalBytes", size.toDouble())
+                        putString("direction", "upload")
+                    }
+                    emitEvent("TransferProgress", map)
+                }
+
+                outputStream.flush()
+                outputStream.close()
+                fileInputStream.close()
+
+                val responseCode = connection.responseCode
+                if (responseCode == 200) {
+                    val responseBody = connection.inputStream.bufferedReader().use { it.readText() }
+                    val map = Arguments.createMap().apply {
+                        putString("transferId", transferId)
+                        putString("filePath", fileUri)
+                        putDouble("fileSize", size.toDouble())
+                    }
+                    emitEvent("TransferSuccess", map)
+                    promise.resolve(responseBody)
+                } else {
+                    val errorMsg = "HTTP error code: $responseCode"
+                    val map = Arguments.createMap().apply {
+                        putString("transferId", transferId)
+                        putString("error", errorMsg)
+                    }
+                    emitEvent("TransferError", map)
+                    promise.reject("UPLOAD_HTTP_ERROR", errorMsg)
+                }
+            } catch (e: Exception) {
+                val map = Arguments.createMap().apply {
+                    putString("transferId", transferId)
+                    putString("error", e.message ?: "Unknown upload error")
+                }
+                emitEvent("TransferError", map)
+                promise.reject("UPLOAD_ERROR", e.message, e)
+            }
+        }.start()
     }
 
     /**
@@ -209,6 +322,37 @@ class NetworkModule(private val reactContext: ReactApplicationContext) :
         engine = null
         server?.stop()
         server = null
+    }
+
+    @ReactMethod
+    fun getLocalIpAddress(promise: Promise) {
+        try {
+            val ip = getLocalIpAddressInternal()
+            promise.resolve(ip)
+        } catch (e: Exception) {
+            promise.reject("IP_ERROR", e.message, e)
+        }
+    }
+
+    private fun getLocalIpAddressInternal(): String {
+        try {
+            val interfaces = java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces())
+            for (intf in interfaces) {
+                val addrs = java.util.Collections.list(intf.inetAddresses)
+                for (addr in addrs) {
+                    if (!addr.isLoopbackAddress) {
+                        val sAddr = addr.hostAddress ?: continue
+                        val isIPv4 = sAddr.indexOf(':') < 0
+                        if (isIPv4) {
+                            return sAddr
+                        }
+                    }
+                }
+            }
+        } catch (ex: Exception) {
+            // ignore
+        }
+        return "127.0.0.1"
     }
 
     private fun deviceToMap(device: DeviceInfo): WritableMap {

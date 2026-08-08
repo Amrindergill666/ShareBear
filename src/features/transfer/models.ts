@@ -11,6 +11,7 @@ export interface FileMetadata {
   name: string;
   size: number;
   mime: string;
+  uri?: string;
 }
 
 export interface PeerProfile {

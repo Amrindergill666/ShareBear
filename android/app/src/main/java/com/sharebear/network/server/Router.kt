@@ -28,7 +28,17 @@ class Router {
      * Routes a Request and returns a Response.
      */
     fun route(request: Request): Response {
-        val handler = routes[request.path] ?: return Response.error(404, "Endpoint not found: ${request.path}")
+        var handler = routes[request.path]
+        if (handler == null) {
+            // Check dynamic transfer file route: /transfer/{transferId}/file
+            if (request.path.startsWith("/transfer/") && request.path.endsWith("/file")) {
+                handler = routes["/transfer/*/file"]
+            }
+        }
+
+        if (handler == null) {
+            return Response.error(404, "Endpoint not found: ${request.path}")
+        }
 
         // For this Phase, we allow GET and POST requests
         if (request.method != "GET" && request.method != "POST") {

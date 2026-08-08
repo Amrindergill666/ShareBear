@@ -27,6 +27,15 @@ export const TransferRepository = {
   },
 
   /**
+   * Deletes a Transfer from the persisted history.
+   */
+  deleteTransfer: (transferId: string): void => {
+    const history = TransferRepository.getHistory();
+    const updated = history.filter((t) => t.transferId !== transferId);
+    storageHelpers.setObject(STORAGE_KEYS.TRANSFER_HISTORY, updated);
+  },
+
+  /**
    * Clears all transfer log history.
    */
   clearHistory: (): void => {

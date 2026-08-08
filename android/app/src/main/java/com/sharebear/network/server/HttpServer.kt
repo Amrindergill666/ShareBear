@@ -1,11 +1,13 @@
 package com.sharebear.network.server
 
+import android.content.Context
 import android.util.Log
 import com.sharebear.network.server.endpoints.CapabilityEndpoint
 import com.sharebear.network.server.endpoints.HealthEndpoint
 import com.sharebear.network.server.endpoints.InfoEndpoint
 import com.sharebear.network.server.endpoints.PingEndpoint
 import com.sharebear.network.server.endpoints.TransferRequestHandler
+import com.sharebear.network.server.endpoints.FileTransferEndpoint
 import com.sharebear.network.server.models.Request
 import com.sharebear.network.server.models.Response
 import java.net.ServerSocket
@@ -19,11 +21,15 @@ import java.util.concurrent.atomic.AtomicInteger
  * Custom lightweight TCP HttpServer that binds to a port and handles GET/POST requests on a thread pool.
  */
 class HttpServer(
+    private val context: Context,
     val port: Int,
     private val deviceId: String,
     private val deviceName: String,
     private val onIncomingTransferRequest: (transferId: String, requestBody: String) -> Unit,
-    private val onStatsUpdated: (requests: Int, lastRequestIp: String) -> Unit
+    private val onStatsUpdated: (requests: Int, lastRequestIp: String) -> Unit,
+    private val onDownloadProgress: (transferId: String, bytesReceived: Long, totalBytes: Long) -> Unit,
+    private val onDownloadComplete: (transferId: String, filePath: String, fileSize: Long) -> Unit,
+    private val onDownloadError: (transferId: String, error: String) -> Unit
 ) {
     private val TAG = "HttpServer"
     
@@ -44,6 +50,7 @@ class HttpServer(
         router.register("/health", HealthEndpoint(startTimeMs) { activeConnections.get() })
         router.register("/capabilities", CapabilityEndpoint())
         router.register("/transfer/request", TransferRequestHandler(onIncomingTransferRequest))
+        router.register("/transfer/*/file", FileTransferEndpoint(context, onDownloadProgress, onDownloadComplete, onDownloadError))
     }
 
     /**

@@ -26,6 +26,16 @@ interface NetworkModuleInterface {
     transferId: string,
     accept: boolean
   ): Promise<boolean>;
+  startUpload(
+    transferId: string,
+    fileUri: string,
+    peerIp: string,
+    peerPort: number,
+    fileName: string,
+    fileSize: number,
+    mimeType: string
+  ): Promise<string>;
+  getLocalIpAddress(): Promise<string>;
   getServerStats(): Promise<{
     isRunning: boolean;
     port: number;
