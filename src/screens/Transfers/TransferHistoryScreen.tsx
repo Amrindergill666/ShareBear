@@ -12,6 +12,7 @@ import { useTransferStore } from '../../store/transferStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { TransferRepository } from '../../features/transfer/TransferRepository';
 import { Transfer } from '../../features/transfer/models';
+import { DeviceProfileModal } from '../../components/DeviceProfileModal';
 import { useTheme } from '../../theme';
 import {
   Menu,
@@ -33,9 +34,10 @@ type FilterType = 'ALL' | 'SENT' | 'RECEIVED';
 
 export function TransferHistoryScreen() {
   const { transfers, setTransfers } = useTransferStore();
-  const { deviceId } = useSettingsStore();
+  const { deviceId, mascotSymbol } = useSettingsStore();
   const { colors } = useTheme();
 
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('ALL');
 
@@ -187,8 +189,22 @@ export function TransferHistoryScreen() {
           <Menu size={24} color={colors.textSecondary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>ShareBear</Text>
-        <TouchableOpacity style={styles.headerButton} activeOpacity={0.7}>
-          <Bell size={24} color={colors.textSecondary} />
+        <TouchableOpacity
+          style={styles.headerButton}
+          activeOpacity={0.7}
+          onPress={() => setProfileModalVisible(true)}
+        >
+          <View
+            style={[
+              styles.headerProfileBadge,
+              {
+                backgroundColor: colors.primaryContainer,
+                borderColor: `${colors.primary}44`,
+              },
+            ]}
+          >
+            <Text style={styles.headerProfileEmoji}>{mascotSymbol || '🐻'}</Text>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -364,6 +380,12 @@ export function TransferHistoryScreen() {
           ))}
         </ScrollView>
       )}
+
+      {/* Device Profile & Appearance Modal */}
+      <DeviceProfileModal
+        visible={profileModalVisible}
+        onClose={() => setProfileModalVisible(false)}
+      />
     </View>
   );
 }
@@ -371,7 +393,6 @@ export function TransferHistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#051521',
     paddingTop: 12,
   },
   header: {
@@ -383,33 +404,41 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   headerButton: {
-    padding: 6,
+    padding: 4,
     borderRadius: 8,
+  },
+  headerProfileBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 3,
+  },
+  headerProfileEmoji: {
+    fontSize: 18,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#F8FAFC',
     letterSpacing: 0.3,
   },
   searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0D2132',
     borderRadius: 24,
     paddingHorizontal: 16,
     marginHorizontal: 20,
     height: 50,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(63, 73, 83, 0.25)',
   },
   searchIcon: {
     marginRight: 10,
   },
   searchInput: {
     flex: 1,
-    color: '#F8FAFC',
     fontSize: 15,
     paddingVertical: 0,
   },
@@ -427,29 +456,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#0A1D2B',
     borderWidth: 1,
-    borderColor: 'rgba(63, 73, 83, 0.4)',
-  },
-  filterChipActive: {
-    backgroundColor: '#7CD5D6',
-    borderColor: '#7CD5D6',
   },
   filterChipText: {
-    color: '#F8FAFC',
     fontSize: 14,
-    fontWeight: '600',
-  },
-  filterChipTextActive: {
-    color: '#051521',
-    fontWeight: 'bold',
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 110,
+    paddingBottom: 120,
   },
   groupSection: {
     marginBottom: 20,

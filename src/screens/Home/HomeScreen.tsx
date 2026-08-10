@@ -18,11 +18,13 @@ import {
   stopDiscovery,
 } from '../../features/discovery/discoveryManager';
 import { RadarAnimation } from '../../components/RadarAnimation';
+import { FilePickerModal } from '../../components/FilePickerModal';
+import { DeviceProfileModal } from '../../components/DeviceProfileModal';
 import { startOutgoingTransfer } from '../../features/transfer/TransferManager';
 import DocumentPicker from 'react-native-document-picker';
 import { NativeNetworkModule } from '../../native/NetworkModule';
 import { useTransferStore } from '../../store/transferStore';
-import { getFreeDiskStorage, getTotalDiskCapacity } from 'react-native-device-info';
+import { getFreeDiskStorage, getTotalDiskCapacity, getBatteryLevel } from 'react-native-device-info';
 import { useTheme } from '../../theme';
 import {
   Menu,
@@ -36,6 +38,7 @@ import {
   FileText,
   CheckCircle2,
   AlertCircle,
+  MoreVertical,
 } from 'lucide-react-native';
 
 const formatSize = (bytes: number): string => {
@@ -73,10 +76,13 @@ const getFileIcon = (mime: string, name: string): 'Image' | 'Video' | 'FileText'
 export function HomeScreen() {
   const { devices } = useDeviceStore();
   const { isDiscoveryActive } = useUiStore();
-  const { deviceName, deviceId } = useSettingsStore();
+  const { deviceName, deviceId, mascotSymbol } = useSettingsStore();
   const { colors } = useTheme();
 
   const deviceList = Object.values(devices);
+
+  // Profile modal state
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
 
   // API inspection state
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
@@ -88,6 +94,8 @@ export function HomeScreen() {
   // Outgoing transfer request state
   const [outgoingLoading, setOutgoingLoading] = useState(false);
   const [outgoingStatus, setOutgoingStatus] = useState<string | null>(null);
+  const [filePickerVisible, setFilePickerVisible] = useState(false);
+  const [selectedTargetDevice, setSelectedTargetDevice] = useState<Device | null>(null);
 
   // Manual connect state
   const [manualModalVisible, setManualModalVisible] = useState(false);
@@ -99,8 +107,10 @@ export function HomeScreen() {
   // Local IP address state
   const [localIp, setLocalIp] = useState<string>('');
 
-  // Storage metric states
+  // Storage & Battery metric states
   const [freeStorageText, setFreeStorageText] = useState<string>('Calculating...');
+  const [freeStorageGB, setFreeStorageGB] = useState<string>('12 GB Free');
+  const [batteryText, setBatteryText] = useState<string>('85%');
   const [storageRatio, setStorageRatio] = useState<number>(0.5);
 
   const { transfers } = useTransferStore();
@@ -120,14 +130,15 @@ export function HomeScreen() {
       }
     };
     
-    const fetchStorage = async () => {
+    const fetchStorageAndBattery = async () => {
       try {
         const freeBytes = await getFreeDiskStorage();
         const totalBytes = await getTotalDiskCapacity();
 
-        const freeGB = (freeBytes / (1024 * 1024 * 1024)).toFixed(1);
+        const freeGB = (freeBytes / (1024 * 1024 * 1024)).toFixed(0);
         const totalGB = (totalBytes / (1024 * 1024 * 1024)).toFixed(1);
         setFreeStorageText(`${freeGB} GB / ${totalGB} GB`);
+        setFreeStorageGB(`${freeGB} GB Free`);
         
         const usedBytes = totalBytes - freeBytes;
         const ratio = totalBytes > 0 ? usedBytes / totalBytes : 0;
@@ -136,10 +147,19 @@ export function HomeScreen() {
         console.error('[HomeScreen] Failed to fetch disk storage:', err);
         setFreeStorageText('Unknown Storage');
       }
+
+      try {
+        const battery = await getBatteryLevel();
+        if (battery >= 0) {
+          setBatteryText(`${Math.round(battery * 100)}%`);
+        }
+      } catch (err) {
+        console.log('[HomeScreen] Failed to get battery level:', err);
+      }
     };
 
     fetchIp();
-    fetchStorage();
+    fetchStorageAndBattery();
   }, []);
 
   const handleToggleDiscovery = async () => {
@@ -214,31 +234,25 @@ export function HomeScreen() {
     }
   };
 
-  const handleSendRequest = async (device: Device) => {
-    try {
-      // 1. Pick a real file using DocumentPicker from device storage
-      const pickedFile = await DocumentPicker.pickSingle({
-        type: [DocumentPicker.types.allFiles],
-      });
+  const handleSendRequest = (device: Device) => {
+    setSelectedTargetDevice(device);
+    setFilePickerVisible(true);
+  };
 
-      // 2. Open loading indicator modal
+  const handleFilesSelected = async (files: { id: string; name: string; size: number; mime: string; uri?: string }[]) => {
+    if (!selectedTargetDevice || files.length === 0) return;
+    const device = selectedTargetDevice;
+
+    try {
+      // 1. Open loading indicator modal
       setOutgoingLoading(true);
       setOutgoingStatus(`Requesting handshake with ${device.name}...`);
 
-      const realFiles = [
-        {
-          id: 'file-' + Date.now(),
-          name: pickedFile.name || 'unnamed_file',
-          size: pickedFile.size || 0,
-          mime: pickedFile.type || 'application/octet-stream',
-        },
-      ];
-
-      // 3. Initiate the handshake request over local network
+      // 2. Initiate the handshake request over local network
       const transferId = await startOutgoingTransfer(
         device.ip,
         device.port,
-        realFiles,
+        files,
       );
       setOutgoingStatus(`Handshake Accepted!\nID: ${transferId}`);
 
@@ -248,11 +262,6 @@ export function HomeScreen() {
         setOutgoingStatus(null);
       }, 3000);
     } catch (err: any) {
-      if (DocumentPicker.isCancel(err)) {
-        console.log('[HomeScreen] Outgoing transfer request cancelled by user');
-        return;
-      }
-
       console.error('[HomeScreen] Outgoing transfer request failed:', err);
       setOutgoingStatus(
         `Handshake Declined:\n${err.message || 'Peer rejected request'}`,
@@ -261,7 +270,7 @@ export function HomeScreen() {
       setTimeout(() => {
         setOutgoingLoading(false);
         setOutgoingStatus(null);
-      }, 4000);
+      }, 3500);
     }
   };
 
@@ -359,108 +368,103 @@ export function HomeScreen() {
           <Menu size={24} color={colors.textSecondary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>ShareBear</Text>
-        <TouchableOpacity style={styles.headerButton} activeOpacity={0.7}>
-          <Bell size={24} color={colors.textSecondary} />
+        <TouchableOpacity
+          style={styles.headerButton}
+          activeOpacity={0.7}
+          onPress={() => setProfileModalVisible(true)}
+        >
+          <View
+            style={[
+              styles.headerProfileBadge,
+              {
+                backgroundColor: colors.primaryContainer,
+                borderColor: `${colors.primary}44`,
+              },
+            ]}
+          >
+            <Text style={styles.headerProfileEmoji}>{mascotSymbol || '🐻'}</Text>
+          </View>
         </TouchableOpacity>
       </View>
 
       {/* Static Top Content */}
       <View style={styles.staticContent}>
-        {/* Action Cards Row */}
-        <View style={styles.actionCardsRow}>
-          <TouchableOpacity
-            style={[
-              styles.actionCard,
-              {
-                backgroundColor: colors.primaryContainer,
-                borderColor: `${colors.primary}30`,
-              },
-              isDiscoveryActive && {
-                borderColor: colors.primary,
-                backgroundColor: `${colors.primary}44`,
-              },
-            ]}
-            onPress={handleToggleDiscovery}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.actionCardIconCircle, { backgroundColor: colors.primary }]}>
-              {isDiscoveryActive ? (
-                <ActivityIndicator size="small" color={colors.onPrimary} />
-              ) : (
-                <ArrowUp size={24} color={colors.onPrimary} />
-              )}
-            </View>
-            <Text style={[styles.actionCardText, { color: colors.primary }]}>
-              {isDiscoveryActive ? 'Scanning...' : 'Scan'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.actionCard,
-              {
-                backgroundColor: colors.primaryContainer,
-                borderColor: `${colors.primary}30`,
-              },
-            ]}
-            onPress={() => {
-              setManualError(null);
-              setManualModalVisible(true);
-            }}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.actionCardIconCircle, { backgroundColor: colors.primary }]}>
-              <ArrowDown size={24} color={colors.onPrimary} />
-            </View>
-            <Text style={[styles.actionCardText, { color: colors.primary }]}>Manual</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Quick Scan QR Bar */}
-        <TouchableOpacity
-          style={[
-            styles.qrBar,
-            {
-              backgroundColor: colors.cardBg,
-              borderColor: colors.cardBorder,
-            },
-          ]}
-          activeOpacity={0.8}
-        >
-          <View style={styles.qrBarLeft}>
-            <QrCode size={20} color={colors.primary} style={{ marginRight: 12 }} />
-            <Text style={[styles.qrBarText, { color: colors.textSecondary }]}>Quick Scan QR</Text>
-          </View>
-          <Text style={[styles.qrBarChevron, { color: colors.primary }]}>›</Text>
-        </TouchableOpacity>
-
-        {/* Phone Storage Card */}
+        {/* Device Hero Info Card */}
         <View
           style={[
-            styles.storageCard,
+            styles.deviceInfoCard,
             {
               backgroundColor: colors.cardBg,
               borderColor: colors.cardBorder,
             },
           ]}
         >
-          <View style={styles.storageHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Smartphone size={16} color={colors.textSecondary} style={{ marginRight: 6 }} />
-              <Text style={[styles.storageTitle, { color: colors.textSecondary }]}>Phone Storage</Text>
-            </View>
-            <Text style={[styles.storageText, { color: colors.textSecondary }]}>{freeStorageText}</Text>
-          </View>
-          <View style={[styles.progressBarBg, { backgroundColor: colors.surfaceVariant }]}>
+          {/* Top Row: Icon Badge, Device Name & Status, 3-dots */}
+          <View style={styles.deviceCardTop}>
             <View
               style={[
-                styles.progressBarFill,
+                styles.deviceIconSquircle,
                 {
-                  backgroundColor: colors.secondary,
-                  width: `${storageRatio * 100}%`,
+                  backgroundColor: colors.primaryContainer,
+                  borderColor: `${colors.primary}33`,
                 },
               ]}
-            />
+            >
+              <Smartphone size={24} color={colors.primary} strokeWidth={2.2} />
+            </View>
+
+            <View style={styles.heroDeviceDetails}>
+              <Text style={[styles.deviceTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                {deviceName || 'Pixel 8 Pro'}
+              </Text>
+              <Text style={[styles.deviceSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+                {RNPlatform.OS === 'android' ? `Android ${RNPlatform.Version}` : `iOS ${RNPlatform.Version}`} • Connected
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.moreCircleBtn,
+                {
+                  backgroundColor: colors.surfaceElevated,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+              activeOpacity={0.7}
+            >
+              <MoreVertical size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Bottom Row: Storage & Battery Metric Boxes */}
+          <View style={styles.metricsRow}>
+            {/* Storage Box */}
+            <View
+              style={[
+                styles.metricBox,
+                {
+                  backgroundColor: colors.surfaceElevated,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+            >
+              <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Storage</Text>
+              <Text style={[styles.metricValue, { color: colors.primary }]}>{freeStorageGB}</Text>
+            </View>
+
+            {/* Battery Box */}
+            <View
+              style={[
+                styles.metricBox,
+                {
+                  backgroundColor: colors.surfaceElevated,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+            >
+              <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Battery</Text>
+              <Text style={[styles.metricValue, { color: colors.textPrimary }]}>{batteryText}</Text>
+            </View>
           </View>
         </View>
 
@@ -795,6 +799,20 @@ export function HomeScreen() {
         </View>
       </View>
     </Modal>
+
+      {/* File Selection Picker Modal */}
+      <FilePickerModal
+        visible={filePickerVisible}
+        onClose={() => setFilePickerVisible(false)}
+        onSend={handleFilesSelected}
+        targetDeviceName={selectedTargetDevice?.name}
+      />
+
+      {/* Device Profile & Appearance Modal */}
+      <DeviceProfileModal
+        visible={profileModalVisible}
+        onClose={() => setProfileModalVisible(false)}
+      />
     </View>
   );
 }
@@ -802,8 +820,6 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#051521',
-    // paddingHorizontal: 10,
     paddingTop: 12,
   },
   staticContent: {
@@ -818,8 +834,20 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   headerButton: {
-    padding: 6,
+    padding: 4,
     borderRadius: 8,
+  },
+  headerProfileBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 3,
+  },
+  headerProfileEmoji: {
+    fontSize: 18,
   },
   headerTitle: {
     fontSize: 20,
@@ -827,100 +855,74 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     letterSpacing: 0.3,
   },
-  actionCardsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  actionCard: {
-    backgroundColor: '#302619',
-    width: '47%',
-    height: 140,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
+  deviceInfoCard: {
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(203, 182, 146, 0.15)',
-  },
-  actionCardScanningActive: {
-    borderColor: '#CBB692',
-    backgroundColor: '#4E3E28',
-  },
-  actionCardIconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  actionCardText: {
-    color: '#CBB692',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  qrBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#0D2132',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(63, 73, 83, 0.2)',
-    marginBottom: 20,
-  },
-  qrBarLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  qrBarText: {
-    color: '#BEC8C9',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  qrBarChevron: {
-    color: '#CBB692',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  storageCard: {
-    backgroundColor: '#0D2132',
-    borderRadius: 20,
     padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(63, 73, 83, 0.2)',
-    marginBottom: 24,
+    marginBottom: 20,
+    elevation: 3,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
   },
-  storageHeader: {
+  deviceCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  deviceIconSquircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 18,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  heroDeviceDetails: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  deviceTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+    letterSpacing: 0.2,
+  },
+  deviceSubtitle: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  moreCircleBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  metricsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    gap: 12,
   },
-  storageTitle: {
-    color: '#BEC8C9',
-    fontSize: 14,
-    fontWeight: '600',
+  metricBox: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
   },
-  storageText: {
-    color: '#BEC8C9',
-    fontSize: 14,
-    fontWeight: '600',
+  metricLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: 4,
   },
-  progressBarBg: {
-    height: 6,
-    backgroundColor: '#1E293B',
-    borderRadius: 3,
-    width: '100%',
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#57B5B6',
-    borderRadius: 3,
+  metricValue: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    letterSpacing: 0.2,
   },
   activitySection: {
     flex: 1,

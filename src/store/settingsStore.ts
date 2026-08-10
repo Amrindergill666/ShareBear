@@ -6,6 +6,7 @@ export interface SettingsState {
   // Recommended system values (keys)
   deviceName: string;
   deviceId: string;
+  mascotSymbol: string;
   theme: 'light' | 'dark' | 'system';
   language: string;
   transferHistory: any[];
@@ -24,6 +25,7 @@ export interface SettingsState {
   // Actions/Setters
   setDeviceName: (name: string) => void;
   setDeviceId: (id: string) => void;
+  setMascotSymbol: (symbol: string) => void;
   setTheme: (theme: 'light' | 'dark' | 'system') => void;
   setLanguage: (lang: string) => void;
   setTransferHistory: (history: any[]) => void;
@@ -43,6 +45,7 @@ export interface SettingsState {
 const DEFAULT_SETTINGS = {
   deviceName: 'ShareBear Device',
   deviceId: '',
+  mascotSymbol: '🐻',
   theme: 'system' as const,
   language: 'en',
   transferHistory: [],
@@ -64,6 +67,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       setDeviceName: (name) => set({ deviceName: name }),
       setDeviceId: (id) => set({ deviceId: id }),
+      setMascotSymbol: (symbol) => set({ mascotSymbol: symbol }),
       setTheme: (theme) => set({ theme }),
       setLanguage: (lang) => set({ language: lang }),
       setTransferHistory: (history) => set({ transferHistory: history }),

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { AppState, AppStateStatus, Appearance, NativeEventEmitter, NativeModules } from 'react-native';
+import { AppState, AppStateStatus, Appearance, NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import { create } from 'zustand';
 import {
   DynamicColorsResult,
@@ -8,6 +8,17 @@ import {
   fetchDynamicColorsAsync,
   buildThemeFromNative,
 } from './dynamicColors';
+import { useSettingsStore } from '../store/settingsStore';
+
+const { DynamicColorsModule } = NativeModules;
+
+// Cache the raw palette from Android so theme mode switching (Light/Dark/System) is 0ms instant
+let cachedRawPalette: any = null;
+if (Platform.OS === 'android' && DynamicColorsModule?.getDynamicColorsSync) {
+  try {
+    cachedRawPalette = DynamicColorsModule.getDynamicColorsSync();
+  } catch (e) {}
+}
 
 interface ThemeState {
   themeResult: DynamicColorsResult;
@@ -15,10 +26,14 @@ interface ThemeState {
   isSupported: boolean;
   isDarkMode: boolean;
   setThemeResult: (result: DynamicColorsResult) => void;
-  refreshTheme: () => Promise<void>;
+  refreshTheme: (overridePref?: 'system' | 'dark' | 'light') => Promise<void>;
+  applyThemeInstant: (pref: 'system' | 'dark' | 'light') => void;
 }
 
-const initial = getInitialDynamicColors();
+const initialPref = useSettingsStore.getState().theme || 'system';
+const initial = cachedRawPalette
+  ? buildThemeFromNative(cachedRawPalette, initialPref)
+  : getInitialDynamicColors(initialPref);
 
 export const useThemeStore = create<ThemeState>((set) => ({
   themeResult: initial,
@@ -32,26 +47,56 @@ export const useThemeStore = create<ThemeState>((set) => ({
       isSupported: result.isSupported,
       isDarkMode: result.isDarkMode,
     }),
-  refreshTheme: async () => {
-    const updated = await fetchDynamicColorsAsync();
+  applyThemeInstant: (pref: 'system' | 'dark' | 'light') => {
+    // 0ms synchronous instantaneous theme calculation
+    const instant = buildThemeFromNative(cachedRawPalette, pref);
     set({
-      themeResult: updated,
-      colors: updated.semantic,
-      isSupported: updated.isSupported,
-      isDarkMode: updated.isDarkMode,
+      themeResult: instant,
+      colors: instant.semantic,
+      isSupported: instant.isSupported,
+      isDarkMode: instant.isDarkMode,
     });
+  },
+  refreshTheme: async (overridePref?: 'system' | 'dark' | 'light') => {
+    const pref = overridePref || useSettingsStore.getState().theme || 'system';
+    // 1. Instant sync update
+    const instant = buildThemeFromNative(cachedRawPalette, pref);
+    set({
+      themeResult: instant,
+      colors: instant.semantic,
+      isSupported: instant.isSupported,
+      isDarkMode: instant.isDarkMode,
+    });
+
+    // 2. Background async refresh if hardware colors updated
+    try {
+      const updated = await fetchDynamicColorsAsync(pref);
+      cachedRawPalette = updated;
+      set({
+        themeResult: updated,
+        colors: updated.semantic,
+        isSupported: updated.isSupported,
+        isDarkMode: updated.isDarkMode,
+      });
+    } catch (e) {}
   },
 }));
 
 /**
  * Hook to use dynamic theme colors anywhere in the app.
- * Automatically updates when Android dynamic accent colors or system theme changes.
+ * Automatically updates when Android dynamic accent colors, system theme, or user theme preference changes.
  */
 export function useTheme() {
-  const { colors, isSupported, isDarkMode, refreshTheme, themeResult } = useThemeStore();
+  const { colors, isSupported, isDarkMode, refreshTheme, applyThemeInstant, themeResult } = useThemeStore();
+  const themePref = useSettingsStore((state) => state.theme);
 
   useEffect(() => {
-    // 1. Listen to app state changes (when user returns from Android Settings / Wallpaper picker)
+    // Instant theme application on preference change
+    applyThemeInstant(themePref);
+  }, [themePref, applyThemeInstant]);
+
+  useEffect(() => {
+    // 1. Listen to app state changes
     const appStateSub = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
         refreshTheme();
@@ -69,12 +114,12 @@ export function useTheme() {
       try {
         const emitter = new NativeEventEmitter(NativeModules.DynamicColorsModule);
         nativeSub = emitter.addListener('onDynamicColorsChanged', (raw) => {
-          const res = buildThemeFromNative(raw);
+          cachedRawPalette = raw;
+          const pref = useSettingsStore.getState().theme || 'system';
+          const res = buildThemeFromNative(raw, pref);
           useThemeStore.getState().setThemeResult(res);
         });
-      } catch (e) {
-        // EventEmitter not supported or module not registered
-      }
+      } catch (e) {}
     }
 
     return () => {

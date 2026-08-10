@@ -1,5 +1,8 @@
 package com.sharebear
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import com.facebook.react.bridge.*
 
 class MyModule(private val reactContext: ReactApplicationContext) :
@@ -12,5 +15,25 @@ class MyModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun hello(name: String, promise: Promise) {
         promise.resolve("Hello $name from Kotlin")
+    }
+
+    @ReactMethod
+    fun getClipboardText(promise: Promise) {
+        reactContext.runOnUiQueueThread {
+            try {
+                val clipboard = reactContext.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                if (clipboard != null && clipboard.hasPrimaryClip()) {
+                    val clip = clipboard.primaryClip
+                    if (clip != null && clip.itemCount > 0) {
+                        val text = clip.getItemAt(0).coerceToText(reactContext).toString()
+                        promise.resolve(text)
+                        return@runOnUiQueueThread
+                    }
+                }
+                promise.resolve("")
+            } catch (e: Exception) {
+                promise.reject("CLIPBOARD_ERROR", e.message, e)
+            }
+        }
     }
 }

@@ -15,6 +15,8 @@ import { useTheme } from '../../theme';
 import { getFreeDiskStorage } from 'react-native-device-info';
 import { NativeNetworkModule } from '../../native/NetworkModule';
 import { startOutgoingTransfer } from '../../features/transfer/TransferManager';
+import { FilePickerModal } from '../../components/FilePickerModal';
+import { DeviceProfileModal } from '../../components/DeviceProfileModal';
 import DocumentPicker from 'react-native-document-picker';
 import {
   Menu,
@@ -33,7 +35,7 @@ import {
 } from 'lucide-react-native';
 
 export function DevicesScreen() {
-  const { deviceName } = useSettingsStore();
+  const { deviceName, mascotSymbol } = useSettingsStore();
   const { devices, removeDevice } = useDeviceStore();
   const { colors } = useTheme();
   const [localIp, setLocalIp] = useState('127.0.0.1');
@@ -41,6 +43,8 @@ export function DevicesScreen() {
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [menuModalVisible, setMenuModalVisible] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
+  const [filePickerVisible, setFilePickerVisible] = useState(false);
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
 
   const deviceList = Object.values(devices);
 
@@ -92,34 +96,17 @@ export function DevicesScreen() {
     setSelectedDevice(null);
   };
 
-  const handleSendFile = async () => {
-    if (!selectedDevice) return;
-    const target = selectedDevice;
+  const handleSendFile = () => {
     setMenuModalVisible(false);
+    setFilePickerVisible(true);
+  };
 
+  const handleFilesSelected = async (files: { id: string; name: string; size: number; mime: string; uri?: string }[]) => {
+    if (!selectedDevice || files.length === 0) return;
     try {
-      const result = await DocumentPicker.pick({
-        allowMultiSelection: true,
-        type: [DocumentPicker.types.allFiles],
-      });
-
-      if (result && result.length > 0) {
-        const filesToTransfer = result.map((file, idx) => ({
-          id: `file-${Date.now()}-${idx}`,
-          name: file.name || 'unnamed_file',
-          size: file.size || 0,
-          mime: file.type || 'application/octet-stream',
-          uri: file.uri,
-        }));
-
-        await startOutgoingTransfer(target.ip, target.port, filesToTransfer);
-      }
+      await startOutgoingTransfer(selectedDevice.ip, selectedDevice.port, files);
     } catch (err) {
-      if (DocumentPicker.isCancel(err)) {
-        console.log('[DevicesScreen] User cancelled document picker');
-      } else {
-        console.error('[DevicesScreen] File transfer error:', err);
-      }
+      console.error('[DevicesScreen] File transfer error:', err);
     }
   };
 
@@ -131,8 +118,22 @@ export function DevicesScreen() {
           <Menu size={24} color={colors.textSecondary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>ShareBear</Text>
-        <TouchableOpacity style={styles.headerButton} activeOpacity={0.7}>
-          <Bell size={24} color={colors.textSecondary} />
+        <TouchableOpacity
+          style={styles.headerButton}
+          activeOpacity={0.7}
+          onPress={() => setProfileModalVisible(true)}
+        >
+          <View
+            style={[
+              styles.headerProfileBadge,
+              {
+                backgroundColor: colors.primaryContainer,
+                borderColor: `${colors.primary}44`,
+              },
+            ]}
+          >
+            <Text style={styles.headerProfileEmoji}>{mascotSymbol || '🐻'}</Text>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -381,6 +382,20 @@ export function DevicesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* File Selection Picker Modal */}
+      <FilePickerModal
+        visible={filePickerVisible}
+        onClose={() => setFilePickerVisible(false)}
+        onSend={handleFilesSelected}
+        targetDeviceName={selectedDevice?.name}
+      />
+
+      {/* Device Profile & Appearance Modal */}
+      <DeviceProfileModal
+        visible={profileModalVisible}
+        onClose={() => setProfileModalVisible(false)}
+      />
     </View>
   );
 }
@@ -399,8 +414,20 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   headerButton: {
-    padding: 6,
+    padding: 4,
     borderRadius: 8,
+  },
+  headerProfileBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 3,
+  },
+  headerProfileEmoji: {
+    fontSize: 18,
   },
   headerTitle: {
     fontSize: 20,

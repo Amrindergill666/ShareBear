@@ -64,7 +64,7 @@ export type DynamicColorsResult = {
 };
 
 // Fallback high-fidelity dark theme palette
-const DEFAULT_DARK_SEMANTIC: SemanticTheme = {
+export const DEFAULT_DARK_SEMANTIC: SemanticTheme = {
   primary: '#CBB692',
   primaryContainer: '#56472B',
   onPrimary: '#1E1705',
@@ -98,7 +98,7 @@ const DEFAULT_DARK_SEMANTIC: SemanticTheme = {
 };
 
 // Fallback light theme palette
-const DEFAULT_LIGHT_SEMANTIC: SemanticTheme = {
+export const DEFAULT_LIGHT_SEMANTIC: SemanticTheme = {
   primary: '#765B27',
   primaryContainer: '#FBE0A6',
   onPrimary: '#FFFFFF',
@@ -121,7 +121,7 @@ const DEFAULT_LIGHT_SEMANTIC: SemanticTheme = {
   accent: '#765B27',
   cardBg: '#FFFFFF',
   cardBorder: '#E2E8F0',
-  navBg: 'rgba(255, 255, 255, 0.92)',
+  navBg: 'rgba(255, 255, 255, 0.94)',
   navActiveBg: '#FBE0A6',
   navActiveIcon: '#765B27',
   navInactiveIcon: '#64748B',
@@ -132,67 +132,123 @@ const DEFAULT_LIGHT_SEMANTIC: SemanticTheme = {
 };
 
 /**
- * Builds a full SemanticTheme from raw dynamic colors or defaults
+ * Builds a full SemanticTheme from raw dynamic colors or defaults, respecting user theme preference
  */
-export function buildThemeFromNative(raw: any): DynamicColorsResult {
-  const isDark = raw?.isDarkMode ?? (Appearance.getColorScheme() !== 'light');
+export function buildThemeFromNative(
+  raw: any,
+  themePref: 'system' | 'dark' | 'light' = 'system'
+): DynamicColorsResult {
+  let isDark = true;
+  if (themePref === 'dark') {
+    isDark = true;
+  } else if (themePref === 'light') {
+    isDark = false;
+  } else {
+    isDark = raw?.isDarkMode ?? (Appearance.getColorScheme() !== 'light');
+  }
+
   const defaults = isDark ? DEFAULT_DARK_SEMANTIC : DEFAULT_LIGHT_SEMANTIC;
 
-  if (raw && raw.isSupported && raw.semantic) {
-    const sem = raw.semantic;
+  if (raw && raw.isSupported) {
     const accent1 = raw.accent1;
     const accent2 = raw.accent2;
     const neutral1 = raw.neutral1;
     const neutral2 = raw.neutral2;
 
-    const navBg = isDark
-      ? `rgba(${hexToRgb(neutral2?.['800'] || sem.surface || '#122536')}, 0.90)`
-      : `rgba(${hexToRgb(sem.surface || '#FFFFFF')}, 0.92)`;
+    if (!isDark) {
+      // LIGHT THEME Dynamic Material Palette
+      const lightTheme: SemanticTheme = {
+        primary: accent1?.['600'] || defaults.primary,
+        primaryContainer: accent1?.['100'] || defaults.primaryContainer,
+        onPrimary: '#FFFFFF',
+        onPrimaryContainer: accent1?.['900'] || defaults.onPrimaryContainer,
+        secondary: accent2?.['600'] || defaults.secondary,
+        secondaryContainer: accent2?.['100'] || defaults.secondaryContainer,
+        onSecondary: '#FFFFFF',
+        onSecondaryContainer: accent2?.['900'] || defaults.onSecondaryContainer,
+        tertiary: defaults.tertiary,
+        tertiaryContainer: defaults.tertiaryContainer,
+        background: neutral1?.['50'] || '#F8FAFC',
+        surface: neutral1?.['10'] || '#FFFFFF',
+        surfaceVariant: neutral2?.['100'] || '#F1F5F9',
+        surfaceElevated: '#FFFFFF',
+        outline: neutral2?.['200'] || '#CBD5E1',
+        outlineVariant: neutral2?.['100'] || '#E2E8F0',
+        textPrimary: neutral1?.['900'] || '#0F172A',
+        textSecondary: neutral2?.['700'] || '#475569',
+        textMuted: neutral2?.['500'] || '#94A3B8',
+        accent: accent1?.['600'] || defaults.accent,
+        cardBg: '#FFFFFF',
+        cardBorder: neutral2?.['200'] || '#E2E8F0',
+        navBg: 'rgba(255, 255, 255, 0.94)',
+        navActiveBg: accent1?.['100'] || defaults.navActiveBg,
+        navActiveIcon: accent1?.['700'] || defaults.navActiveIcon,
+        navInactiveIcon: neutral2?.['500'] || defaults.navInactiveIcon,
+        success: '#059669',
+        error: '#E11D48',
+        warning: '#D97706',
+        info: '#2563EB',
+      };
 
-    const theme: SemanticTheme = {
-      primary: sem.primary || defaults.primary,
-      primaryContainer: sem.primaryContainer || defaults.primaryContainer,
-      onPrimary: sem.onPrimary || defaults.onPrimary,
-      onPrimaryContainer: sem.onPrimaryContainer || defaults.onPrimaryContainer,
-      secondary: sem.secondary || defaults.secondary,
-      secondaryContainer: sem.secondaryContainer || defaults.secondaryContainer,
-      onSecondary: sem.onSecondary || defaults.onSecondary,
-      onSecondaryContainer: sem.onSecondaryContainer || defaults.onSecondaryContainer,
-      tertiary: sem.tertiary || defaults.tertiary,
-      tertiaryContainer: sem.tertiaryContainer || defaults.tertiaryContainer,
-      background: sem.background || defaults.background,
-      surface: sem.surface || defaults.surface,
-      surfaceVariant: isDark ? (neutral2?.['700'] || sem.surfaceVariant || defaults.surfaceVariant) : (neutral2?.['100'] || sem.surfaceVariant || defaults.surfaceVariant),
-      surfaceElevated: sem.surfaceElevated || defaults.surfaceElevated,
-      outline: sem.outline || defaults.outline,
-      outlineVariant: sem.outlineVariant || defaults.outlineVariant,
-      textPrimary: sem.textPrimary || defaults.textPrimary,
-      textSecondary: sem.textSecondary || defaults.textSecondary,
-      textMuted: sem.textMuted || defaults.textMuted,
-      // Mapped specialized tokens with distinct contrast
-      accent: sem.primary || defaults.accent,
-      cardBg: isDark ? (neutral1?.['800'] || sem.surface) : (neutral1?.['10'] || '#FFFFFF'),
-      cardBorder: isDark ? (neutral2?.['600'] || sem.outline) : (neutral2?.['200'] || '#E2E8F0'),
-      navBg: navBg,
-      navActiveBg: isDark ? (accent1?.['800'] || sem.primaryContainer) : (accent1?.['100'] || sem.primaryContainer),
-      navActiveIcon: isDark ? (accent1?.['200'] || sem.primary) : (accent1?.['600'] || sem.primary),
-      navInactiveIcon: isDark ? (neutral2?.['300'] || defaults.navInactiveIcon) : (neutral2?.['500'] || defaults.navInactiveIcon),
-      success: '#10B981',
-      error: '#F43F5E',
-      warning: '#F59E0B',
-      info: '#3B82F6',
-    };
+      return {
+        isSupported: true,
+        isDarkMode: false,
+        accent1: raw.accent1,
+        accent2: raw.accent2,
+        accent3: raw.accent3,
+        neutral1: raw.neutral1,
+        neutral2: raw.neutral2,
+        semantic: lightTheme,
+      };
+    } else {
+      // DARK THEME Dynamic Material Palette
+      const sem = raw.semantic || {};
+      const navBg = `rgba(${hexToRgb(neutral2?.['800'] || sem.surface || '#122536')}, 0.90)`;
 
-    return {
-      isSupported: true,
-      isDarkMode: isDark,
-      accent1: raw.accent1,
-      accent2: raw.accent2,
-      accent3: raw.accent3,
-      neutral1: raw.neutral1,
-      neutral2: raw.neutral2,
-      semantic: theme,
-    };
+      const darkTheme: SemanticTheme = {
+        primary: accent1?.['200'] || sem.primary || defaults.primary,
+        primaryContainer: accent1?.['800'] || sem.primaryContainer || defaults.primaryContainer,
+        onPrimary: sem.onPrimary || defaults.onPrimary,
+        onPrimaryContainer: sem.onPrimaryContainer || defaults.onPrimaryContainer,
+        secondary: accent2?.['200'] || sem.secondary || defaults.secondary,
+        secondaryContainer: accent2?.['800'] || sem.secondaryContainer || defaults.secondaryContainer,
+        onSecondary: sem.onSecondary || defaults.onSecondary,
+        onSecondaryContainer: sem.onSecondaryContainer || defaults.onSecondaryContainer,
+        tertiary: sem.tertiary || defaults.tertiary,
+        tertiaryContainer: sem.tertiaryContainer || defaults.tertiaryContainer,
+        background: neutral1?.['900'] || sem.background || defaults.background,
+        surface: neutral1?.['800'] || sem.surface || defaults.surface,
+        surfaceVariant: neutral2?.['700'] || sem.surfaceVariant || defaults.surfaceVariant,
+        surfaceElevated: sem.surfaceElevated || defaults.surfaceElevated,
+        outline: sem.outline || defaults.outline,
+        outlineVariant: sem.outlineVariant || defaults.outlineVariant,
+        textPrimary: neutral1?.['50'] || sem.textPrimary || defaults.textPrimary,
+        textSecondary: neutral2?.['200'] || sem.textSecondary || defaults.textSecondary,
+        textMuted: neutral2?.['400'] || sem.textMuted || defaults.textMuted,
+        accent: accent1?.['200'] || sem.primary || defaults.accent,
+        cardBg: neutral1?.['800'] || sem.surface || defaults.cardBg,
+        cardBorder: neutral2?.['600'] || sem.outline || defaults.cardBorder,
+        navBg: navBg,
+        navActiveBg: accent1?.['800'] || sem.primaryContainer || defaults.navActiveBg,
+        navActiveIcon: accent1?.['200'] || sem.primary || defaults.navActiveIcon,
+        navInactiveIcon: neutral2?.['300'] || defaults.navInactiveIcon,
+        success: '#10B981',
+        error: '#F43F5E',
+        warning: '#F59E0B',
+        info: '#3B82F6',
+      };
+
+      return {
+        isSupported: true,
+        isDarkMode: true,
+        accent1: raw.accent1,
+        accent2: raw.accent2,
+        accent3: raw.accent3,
+        neutral1: raw.neutral1,
+        neutral2: raw.neutral2,
+        semantic: darkTheme,
+      };
+    }
   }
 
   return {
@@ -217,29 +273,31 @@ function hexToRgb(hex: string): string {
 /**
  * Fetch dynamic colors synchronously if supported, or fall back to default
  */
-export function getInitialDynamicColors(): DynamicColorsResult {
+export function getInitialDynamicColors(themePref: 'system' | 'dark' | 'light' = 'system'): DynamicColorsResult {
   if (Platform.OS === 'android' && DynamicColorsModule?.getDynamicColorsSync) {
     try {
       const raw = DynamicColorsModule.getDynamicColorsSync();
-      return buildThemeFromNative(raw);
+      return buildThemeFromNative(raw, themePref);
     } catch (e) {
       console.warn('Failed to get synchronous dynamic colors:', e);
     }
   }
-  return buildThemeFromNative(null);
+  return buildThemeFromNative(null, themePref);
 }
 
 /**
  * Fetch dynamic colors asynchronously from native Android
  */
-export async function fetchDynamicColorsAsync(): Promise<DynamicColorsResult> {
+export async function fetchDynamicColorsAsync(
+  themePref: 'system' | 'dark' | 'light' = 'system'
+): Promise<DynamicColorsResult> {
   if (Platform.OS === 'android' && DynamicColorsModule?.getDynamicColors) {
     try {
       const raw = await DynamicColorsModule.getDynamicColors();
-      return buildThemeFromNative(raw);
+      return buildThemeFromNative(raw, themePref);
     } catch (e) {
       console.warn('Failed to get asynchronous dynamic colors:', e);
     }
   }
-  return buildThemeFromNative(null);
+  return buildThemeFromNative(null, themePref);
 }
