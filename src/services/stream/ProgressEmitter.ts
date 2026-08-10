@@ -66,7 +66,17 @@ export const ProgressEmitter = {
 
       const session = useTransferStore.getState().activeSession;
       if (session && session.transferId === transferId) {
-        useTransferStore.getState().setActiveSession(null);
+        useTransferStore.getState().setActiveSession({
+          ...session,
+          status: 'completed',
+          percentage: 100,
+        });
+        setTimeout(() => {
+          const cur = useTransferStore.getState().activeSession;
+          if (cur?.transferId === transferId) {
+            useTransferStore.getState().setActiveSession(null);
+          }
+        }, 1800);
       }
 
       // Update transfer history status to COMPLETED
@@ -85,7 +95,17 @@ export const ProgressEmitter = {
 
       const session = useTransferStore.getState().activeSession;
       if (session && session.transferId === transferId) {
-        useTransferStore.getState().setActiveSession(null);
+        useTransferStore.getState().setActiveSession({
+          ...session,
+          status: 'failed',
+          error: error || 'Transfer failed',
+        });
+        setTimeout(() => {
+          const cur = useTransferStore.getState().activeSession;
+          if (cur?.transferId === transferId) {
+            useTransferStore.getState().setActiveSession(null);
+          }
+        }, 2500);
       }
 
       // Update transfer history status to FAILED

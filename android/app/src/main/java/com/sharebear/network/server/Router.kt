@@ -30,9 +30,11 @@ class Router {
     fun route(request: Request): Response {
         var handler = routes[request.path]
         if (handler == null) {
-            // Check dynamic transfer file route: /transfer/{transferId}/file
+            // Check dynamic transfer routes: /transfer/{transferId}/file and /transfer/{transferId}/text
             if (request.path.startsWith("/transfer/") && request.path.endsWith("/file")) {
                 handler = routes["/transfer/*/file"]
+            } else if (request.path.startsWith("/transfer/") && request.path.endsWith("/text")) {
+                handler = routes["/transfer/*/text"]
             }
         }
 

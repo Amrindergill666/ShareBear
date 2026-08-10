@@ -1,6 +1,8 @@
 package com.sharebear.network.server.endpoints
 
 import android.content.Context
+import android.media.MediaScannerConnection
+import android.os.Environment
 import android.util.Log
 import com.sharebear.network.server.RequestHandler
 import com.sharebear.network.server.models.Request
@@ -18,6 +20,22 @@ class FileTransferEndpoint(
 
     private val TAG = "FileTransferEndpoint"
 
+    private fun getUniqueDestinationFile(dir: File, name: String): File {
+        var file = File(dir, name)
+        if (!file.exists()) return file
+
+        val dotIndex = name.lastIndexOf('.')
+        val baseName = if (dotIndex != -1) name.substring(0, dotIndex) else name
+        val extension = if (dotIndex != -1) name.substring(dotIndex) else ""
+
+        var count = 1
+        while (file.exists()) {
+            file = File(dir, "$baseName ($count)$extension")
+            count++
+        }
+        return file
+    }
+
     override fun handle(request: Request): Response {
         // Path is like: /transfer/{transferId}/file
         val pathParts = request.path.split("/")
@@ -26,7 +44,8 @@ class FileTransferEndpoint(
         }
         val transferId = pathParts[2]
 
-        val fileName = request.headers["x-file-name"] ?: "downloaded_file"
+        val rawFileName = request.headers["x-file-name"] ?: "downloaded_file"
+        val fileName = File(rawFileName).name // sanitize path traversal
         val fileSizeStr = request.headers["x-file-size"]
         val mimeType = request.headers["x-mime-type"] ?: "application/octet-stream"
 
@@ -35,31 +54,49 @@ class FileTransferEndpoint(
         Log.i(TAG, "Starting dynamic download stream: $fileName ($fileSize bytes) for Transfer ID: $transferId")
 
         try {
-            val downloadDir = File(context.cacheDir, "downloads")
-            if (!downloadDir.exists()) {
-                downloadDir.mkdirs()
+            // Priority: Public Downloads/ShareBear -> App External Downloads -> App Cache
+            val downloadDir = try {
+                val publicDir = File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                    "ShareBear"
+                )
+                if (!publicDir.exists()) {
+                    publicDir.mkdirs()
+                }
+                if (publicDir.exists() && publicDir.canWrite()) {
+                    publicDir
+                } else {
+                    val extDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "ShareBear")
+                    if (!extDir.exists()) extDir.mkdirs()
+                    extDir
+                }
+            } catch (e: Exception) {
+                val fallback = File(context.cacheDir, "downloads")
+                if (!fallback.exists()) fallback.mkdirs()
+                fallback
             }
-            val destinationFile = File(downloadDir, fileName)
+
+            val destinationFile = getUniqueDestinationFile(downloadDir, fileName)
             val fileOutputStream = FileOutputStream(destinationFile)
 
             val inputStream = request.rawInputStream
             val buffer = ByteArray(64 * 1024)
-            var bytesRead: Int
             var totalBytesRead: Long = 0
 
-            while (true) {
-                bytesRead = inputStream.read(buffer)
+            while (fileSize <= 0 || totalBytesRead < fileSize) {
+                val bytesToRead = if (fileSize > 0) {
+                    Math.min(buffer.size.toLong(), fileSize - totalBytesRead).toInt()
+                } else {
+                    buffer.size
+                }
+
+                val bytesRead = inputStream.read(buffer, 0, bytesToRead)
                 if (bytesRead == -1) break
                 fileOutputStream.write(buffer, 0, bytesRead)
                 totalBytesRead += bytesRead
 
                 // Emit progress to React Native
                 onDownloadProgress(transferId, totalBytesRead, fileSize)
-                
-                // Break early if we've read everything (to prevent waiting indefinitely on socket)
-                if (fileSize > 0 && totalBytesRead >= fileSize) {
-                    break
-                }
             }
 
             fileOutputStream.flush()
@@ -68,10 +105,22 @@ class FileTransferEndpoint(
             // File verification
             if (totalBytesRead == fileSize) {
                 Log.i(TAG, "Download complete and verified: ${destinationFile.absolutePath}")
+
+                // Scan into Android MediaStore so Gallery & Downloads immediately list it
+                try {
+                    MediaScannerConnection.scanFile(
+                        context,
+                        arrayOf(destinationFile.absolutePath),
+                        arrayOf(mimeType),
+                        null
+                    )
+                } catch (ignored: Exception) {}
+
                 onDownloadComplete(transferId, destinationFile.absolutePath, totalBytesRead)
                 
                 val json = JSONObject().apply {
                     put("status", "success")
+                    put("filePath", destinationFile.absolutePath)
                     put("bytesReceived", totalBytesRead)
                 }
                 return Response.json(200, json.toString())

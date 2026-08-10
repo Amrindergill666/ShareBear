@@ -19,8 +19,12 @@ export interface PeerProfile {
   deviceName: string;
 }
 
+export type TransferType = 'file' | 'text' | 'clipboard';
+
 export interface TransferRequest {
   sender: PeerProfile;
+  transferType?: TransferType;
+  textPayload?: string;
   files: FileMetadata[];
   totalFiles: number;
   totalSize: number;
@@ -37,6 +41,8 @@ export interface Transfer {
   senderId: string;
   senderName: string;
   receiverId: string;
+  transferType?: TransferType;
+  textPayload?: string;
   status: TransferState;
   createdAt: number;
   totalFiles: number;

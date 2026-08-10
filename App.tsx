@@ -6,6 +6,7 @@ import {
   View,
   TouchableOpacity,
   Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import {
   SafeAreaProvider,
@@ -19,6 +20,7 @@ import { SettingsScreen } from './src/screens/Settings/SettingsScreen';
 import { TransferHistoryScreen } from './src/screens/Transfers/TransferHistoryScreen';
 import { IncomingTransferDialog } from './src/components/IncomingTransferDialog';
 import { TransferProgressDialog } from './src/components/TransferProgressDialog';
+import { ReceivedTextModal } from './src/components/ReceivedTextModal';
 import { useUiStore } from './src/store/uiStore';
 import { useSettingsStore } from './src/store';
 import { getDeviceId, getDeviceName, getBrand } from 'react-native-device-info';
@@ -38,6 +40,18 @@ function AppContent() {
         setDeviceName(`${getBrand()} ${name}`);
         const id = getDeviceId();
         setDeviceId(id);
+
+        // Request network/location permission on Android for Wi-Fi SSID access
+        if (Platform.OS === 'android') {
+          try {
+            await PermissionsAndroid.requestMultiple([
+              PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+              PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+            ]);
+          } catch (pErr) {
+            console.warn('Permission error:', pErr);
+          }
+        }
 
         // Auto-start HTTP Control Server on app launch
         await startServer();
@@ -87,6 +101,9 @@ function AppContent() {
 
       {/* Mount the Global Transfer Progress Dialog */}
       <TransferProgressDialog />
+
+      {/* Mount the Global Received Text / Clipboard Modal */}
+      <ReceivedTextModal />
 
       <Navbar safeAreaInsets={safeAreaInsets}/>
     </SafeAreaView>

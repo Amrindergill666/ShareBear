@@ -35,7 +35,15 @@ interface NetworkModuleInterface {
     fileSize: number,
     mimeType: string
   ): Promise<string>;
+  sendTextPayload(
+    transferId: string,
+    peerIp: string,
+    peerPort: number,
+    text: string,
+    transferType: string
+  ): Promise<string>;
   getLocalIpAddress(): Promise<string>;
+  getWifiName(): Promise<string>;
   getServerStats(): Promise<{
     isRunning: boolean;
     port: number;

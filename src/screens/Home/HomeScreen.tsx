@@ -39,6 +39,7 @@ import {
   CheckCircle2,
   AlertCircle,
   MoreVertical,
+  Wifi,
 } from 'lucide-react-native';
 
 const formatSize = (bytes: number): string => {
@@ -104,8 +105,9 @@ export function HomeScreen() {
   const [manualLoading, setManualLoading] = useState(false);
   const [manualError, setManualError] = useState<string | null>(null);
 
-  // Local IP address state
+  // Local IP address & Wi-Fi state
   const [localIp, setLocalIp] = useState<string>('');
+  const [wifiName, setWifiName] = useState<string>('Wi-Fi');
 
   // Storage & Battery metric states
   const [freeStorageText, setFreeStorageText] = useState<string>('Calculating...');
@@ -118,15 +120,21 @@ export function HomeScreen() {
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 5);
 
-  // Fetch local IP address and storage metrics on mount
+  // Fetch local IP address, Wi-Fi name, and storage metrics on mount
   useEffect(() => {
-    const fetchIp = async () => {
+    const fetchNetworkInfo = async () => {
       try {
         const ip = await NativeNetworkModule.getLocalIpAddress();
         setLocalIp(ip);
       } catch (err) {
         console.error('[HomeScreen] Failed to get local IP:', err);
         setLocalIp('Unknown');
+      }
+      try {
+        const wifi = await NativeNetworkModule.getWifiName();
+        if (wifi) setWifiName(wifi);
+      } catch (err) {
+        console.error('[HomeScreen] Failed to get Wi-Fi name:', err);
       }
     };
     
@@ -158,8 +166,11 @@ export function HomeScreen() {
       }
     };
 
-    fetchIp();
+    fetchNetworkInfo();
     fetchStorageAndBattery();
+
+    const timer = setTimeout(fetchNetworkInfo, 2000);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleToggleDiscovery = async () => {
@@ -253,6 +264,7 @@ export function HomeScreen() {
         device.ip,
         device.port,
         files,
+        device.name,
       );
       setOutgoingStatus(`Handshake Accepted!\nID: ${transferId}`);
 
@@ -417,9 +429,12 @@ export function HomeScreen() {
               <Text style={[styles.deviceTitle, { color: colors.textPrimary }]} numberOfLines={1}>
                 {deviceName || 'Pixel 8 Pro'}
               </Text>
-              <Text style={[styles.deviceSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-                {RNPlatform.OS === 'android' ? `Android ${RNPlatform.Version}` : `iOS ${RNPlatform.Version}`} • Connected
-              </Text>
+              <View style={styles.heroSubRow}>
+                <Wifi size={13} color={colors.secondary} style={{ marginRight: 5 }} />
+                <Text style={[styles.deviceSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {wifiName || 'Wi-Fi'} • {RNPlatform.OS === 'android' ? `Android ${RNPlatform.Version}` : `iOS ${RNPlatform.Version}`}
+                </Text>
+              </View>
             </View>
 
             <TouchableOpacity
@@ -431,12 +446,13 @@ export function HomeScreen() {
                 },
               ]}
               activeOpacity={0.7}
+              onPress={() => setProfileModalVisible(true)}
             >
               <MoreVertical size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
-          {/* Bottom Row: Storage & Battery Metric Boxes */}
+          {/* Bottom Row: Storage, Battery & IP Metric Boxes */}
           <View style={styles.metricsRow}>
             {/* Storage Box */}
             <View
@@ -464,6 +480,22 @@ export function HomeScreen() {
             >
               <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Battery</Text>
               <Text style={[styles.metricValue, { color: colors.textPrimary }]}>{batteryText}</Text>
+            </View>
+
+            {/* IP Address Box */}
+            <View
+              style={[
+                styles.metricBox,
+                {
+                  backgroundColor: colors.surfaceElevated,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+            >
+              <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>IP Address</Text>
+              <Text style={[styles.metricValue, { color: colors.secondary, fontSize: 12.5 }]} numberOfLines={1}>
+                {localIp || '127.0.0.1'}
+              </Text>
             </View>
           </View>
         </View>
@@ -517,7 +549,7 @@ export function HomeScreen() {
                 <View style={styles.deviceInfo}>
                   <Text style={[styles.deviceCardName, { color: colors.textPrimary }]}>{device.name}</Text>
                   <Text style={[styles.deviceDetails, { color: colors.textSecondary }]}>
-                    IP: {device.ip}:{device.port}
+                    IP: {device.ip}:{device.port} • {wifiName || 'Wi-Fi'}
                   </Text>
                 </View>
 
@@ -887,11 +919,15 @@ const styles = StyleSheet.create({
   deviceTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginBottom: 2,
     letterSpacing: 0.2,
   },
+  heroSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   deviceSubtitle: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '500',
   },
   moreCircleBtn: {

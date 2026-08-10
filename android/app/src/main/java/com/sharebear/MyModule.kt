@@ -36,4 +36,18 @@ class MyModule(private val reactContext: ReactApplicationContext) :
             }
         }
     }
+
+    @ReactMethod
+    fun setClipboardText(text: String, promise: Promise) {
+        reactContext.runOnUiQueueThread {
+            try {
+                val clipboard = reactContext.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                val clip = ClipData.newPlainText("ShareBear", text)
+                clipboard?.setPrimaryClip(clip)
+                promise.resolve(true)
+            } catch (e: Exception) {
+                promise.reject("CLIPBOARD_SET_ERROR", e.message, e)
+            }
+        }
+    }
 }

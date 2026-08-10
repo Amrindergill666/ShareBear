@@ -9,8 +9,8 @@ export const sendTransferRequest = async (
   payload: TransferRequest
 ): Promise<TransferResponse> => {
   const controller = new AbortController();
-  // We use 35 seconds timeout to accommodate the receiver's 30s user-input hold block.
-  const timeoutId = setTimeout(() => controller.abort(), 35000);
+  // We use 65 seconds timeout to accommodate the receiver's 60s user-input hold block.
+  const timeoutId = setTimeout(() => controller.abort(), 65000);
 
   try {
     const url = `http://${peerIp}:${peerPort}/transfer/request`;

@@ -20,9 +20,15 @@ import {
   startDiscovery,
   stopDiscovery,
 } from '../../features/discovery/discoveryManager';
-import { startOutgoingTransfer } from '../../features/transfer/TransferManager';
+import {
+  startOutgoingTransfer,
+  startOutgoingTextTransfer,
+} from '../../features/transfer/TransferManager';
 import { FilePickerModal } from '../../components/FilePickerModal';
 import { DeviceProfileModal } from '../../components/DeviceProfileModal';
+import { ManualDeviceModal } from '../../components/ManualDeviceModal';
+import { FavoriteDevicesModal } from '../../components/FavoriteDevicesModal';
+import { NativeNetworkModule } from '../../native/NetworkModule';
 import { getSystemClipboardText } from '../../utils/clipboard';
 import DocumentPicker from 'react-native-document-picker';
 import { useTheme } from '../../theme';
@@ -47,6 +53,7 @@ import {
   Plus,
   Paperclip,
   Trash2,
+  ShieldCheck,
   Video as VideoIcon,
   Image as ImageIcon,
 } from 'lucide-react-native';
@@ -58,27 +65,34 @@ export interface SelectedFileItem {
   mime: string;
   uri?: string;
   type?: 'photo' | 'video' | 'doc' | 'music';
+  transferType?: 'file' | 'text' | 'clipboard';
+  textPayload?: string;
 }
 
 export function NearbyScreen() {
-  const { devices } = useDeviceStore();
+  const { devices, favoriteDevices, toggleFavorite, addOrUpdateDevice } = useDeviceStore();
   const { isDiscoveryActive } = useUiStore();
   const { deviceName, mascotSymbol } = useSettingsStore();
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
 
   const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [manualModalVisible, setManualModalVisible] = useState(false);
+  const [favoriteModalVisible, setFavoriteModalVisible] = useState(false);
   const [filePickerVisible, setFilePickerVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [addDrawerVisible, setAddDrawerVisible] = useState(false);
   const [selectedTargetDevice, setSelectedTargetDevice] = useState<Device | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<SelectedFileItem[]>([]);
-  const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
   // Quick text send modal state
   const [textModalVisible, setTextModalVisible] = useState(false);
   const [textMessage, setTextMessage] = useState('');
+
+  // Local IP address & Wi-Fi state
+  const [localIp, setLocalIp] = useState<string>('127.0.0.1');
+  const [wifiName, setWifiName] = useState<string>('Wi-Fi');
 
   const deviceList = Object.values(devices);
 
@@ -94,6 +108,24 @@ export function NearbyScreen() {
     if (!isDiscoveryActive) {
       startDiscovery().catch((err) => console.warn('[NearbyScreen] Start discovery error:', err));
     }
+
+    const fetchNetworkInfo = async () => {
+      try {
+        const ip = await NativeNetworkModule.getLocalIpAddress();
+        if (ip) setLocalIp(ip);
+      } catch (err) {
+        console.warn('[NearbyScreen] IP error:', err);
+      }
+      try {
+        const wifi = await NativeNetworkModule.getWifiName();
+        if (wifi) setWifiName(wifi);
+      } catch (err) {
+        console.warn('[NearbyScreen] Wifi error:', err);
+      }
+    };
+    fetchNetworkInfo();
+    const timer = setTimeout(fetchNetworkInfo, 2000);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -188,18 +220,33 @@ export function NearbyScreen() {
     }
   };
 
-  const toggleFavorite = (deviceId: string) => {
-    setFavorites((prev) => ({
-      ...prev,
-      [deviceId]: !prev[deviceId],
-    }));
+  const handleSelectFavoriteDevice = (device: Device) => {
+    addOrUpdateDevice({
+      ...device,
+      isOnline: true,
+      lastSeen: Date.now(),
+    });
+    setSelectedTargetDevice(device);
+    setFavoriteModalVisible(false);
   };
 
   const handleDevicePress = async (device: Device) => {
     if (selectedFiles.length > 0) {
-      // Direct send current selection
+      // Check if text/clipboard item was selected
+      const textItem = selectedFiles.find((f) => f.transferType === 'text' || f.transferType === 'clipboard');
       try {
-        await startOutgoingTransfer(device.ip, device.port, selectedFiles);
+        if (textItem && textItem.textPayload) {
+          await startOutgoingTextTransfer(
+            device.ip,
+            device.port,
+            textItem.textPayload,
+            (textItem.transferType as 'text' | 'clipboard') || 'text',
+            device.name
+          );
+          setSelectedFiles([]);
+        } else {
+          await startOutgoingTransfer(device.ip, device.port, selectedFiles, device.name);
+        }
       } catch (err) {
         console.error('[NearbyScreen] Transfer error:', err);
       }
@@ -227,6 +274,14 @@ export function NearbyScreen() {
             uri: file.uri,
           }));
           setSelectedFiles((prev) => [...prev, ...filesToAdd]);
+          if (selectedTargetDevice) {
+            startOutgoingTransfer(
+              selectedTargetDevice.ip,
+              selectedTargetDevice.port,
+              filesToAdd,
+              selectedTargetDevice.name
+            ).catch((err) => console.error('[NearbyScreen] Folder transfer error:', err));
+          }
         }
       } catch (err) {
         if (!DocumentPicker.isCancel(err)) {
@@ -237,14 +292,27 @@ export function NearbyScreen() {
       try {
         const clipText = await getSystemClipboardText();
         if (clipText && clipText.trim().length > 0) {
-          const textFile: SelectedFileItem = {
-            id: `paste-${Date.now()}`,
-            name: `clipboard_${new Date().toISOString().slice(11, 19).replace(/:/g, '-')}.txt`,
-            size: clipText.length,
-            mime: 'text/plain',
-            type: 'doc',
-          };
-          setSelectedFiles((prev) => [...prev, textFile]);
+          if (selectedTargetDevice) {
+            // Direct send clipboard text to selected device
+            startOutgoingTextTransfer(
+              selectedTargetDevice.ip,
+              selectedTargetDevice.port,
+              clipText,
+              'clipboard',
+              selectedTargetDevice.name
+            ).catch((err) => console.error('[NearbyScreen] Clipboard transfer error:', err));
+          } else {
+            const textItem: SelectedFileItem = {
+              id: `paste-${Date.now()}`,
+              name: 'Clipboard Text',
+              size: clipText.length,
+              mime: 'text/plain',
+              type: 'doc',
+              transferType: 'clipboard',
+              textPayload: clipText,
+            };
+            setSelectedFiles((prev) => [...prev, textItem]);
+          }
         } else {
           // If clipboard is empty, open text modal
           setTextModalVisible(true);
@@ -260,13 +328,27 @@ export function NearbyScreen() {
 
   const handleSendText = () => {
     if (!textMessage.trim()) return;
-    const textFile: SelectedFileItem = {
-      id: `text-${Date.now()}`,
-      name: `message_${new Date().toISOString().slice(11, 19).replace(/:/g, '-')}.txt`,
-      size: textMessage.length,
-      mime: 'text/plain',
-    };
-    setSelectedFiles((prev) => [...prev, textFile]);
+    if (selectedTargetDevice) {
+      // Direct send text message to selected device
+      startOutgoingTextTransfer(
+        selectedTargetDevice.ip,
+        selectedTargetDevice.port,
+        textMessage,
+        'text',
+        selectedTargetDevice.name
+      ).catch((err) => console.error('[NearbyScreen] Text transfer error:', err));
+    } else {
+      const textItem: SelectedFileItem = {
+        id: `text-${Date.now()}`,
+        name: 'Text Message',
+        size: textMessage.length,
+        mime: 'text/plain',
+        type: 'doc',
+        transferType: 'text',
+        textPayload: textMessage,
+      };
+      setSelectedFiles((prev) => [...prev, textItem]);
+    }
     setTextModalVisible(false);
     setTextMessage('');
   };
@@ -292,7 +374,7 @@ export function NearbyScreen() {
     // Append newly picked files to the selection batch
     setSelectedFiles((prev) => [...prev, ...(files as SelectedFileItem[])]);
     if (selectedTargetDevice) {
-      startOutgoingTransfer(selectedTargetDevice.ip, selectedTargetDevice.port, files).catch(
+      startOutgoingTransfer(selectedTargetDevice.ip, selectedTargetDevice.port, files, selectedTargetDevice.name).catch(
         (err) => console.error('[NearbyScreen] Transfer error:', err)
       );
     }
@@ -363,7 +445,7 @@ export function NearbyScreen() {
   });
 
   const displayedDevices = showFavoritesOnly
-    ? deviceList.filter((d) => favorites[d.id])
+    ? deviceList.filter((d) => !!favoriteDevices[d.id])
     : deviceList;
 
   return (
@@ -399,8 +481,8 @@ export function NearbyScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* CONDITIONAL RENDERING: */}
-        {/* 1. If NO devices found: Show Radar Animation Hero */}
-        {deviceList.length === 0 ? (
+        {/* 1. If NO devices found and no target selected: Show Radar Animation Hero */}
+        {deviceList.length === 0 && !selectedTargetDevice ? (
           <View style={styles.radarSection}>
             {/* Concentric Animated Radar Waves */}
             {isDiscoveryActive && (
@@ -439,15 +521,39 @@ export function NearbyScreen() {
                 styles.centerDeviceBadge,
                 {
                   backgroundColor: colors.surfaceElevated,
-                  borderColor: `${colors.primary}44`,
+                  borderColor: `${colors.primary}55`,
                   shadowColor: colors.primary,
                 },
               ]}
             >
-              <View style={[styles.centerDeviceScreen, { backgroundColor: `${colors.secondary}22` }]}>
+              <View
+                style={[
+                  styles.mascotAvatarCircle,
+                  {
+                    backgroundColor: colors.primaryContainer,
+                    borderColor: `${colors.primary}44`,
+                  },
+                ]}
+              >
                 <Text style={styles.centerDeviceIcon}>{mascotSymbol || '🐻'}</Text>
-                <Text style={[styles.centerDeviceSub, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {deviceName || 'ShareBear'}
+              </View>
+
+              <Text style={[styles.centerDeviceTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                {deviceName || 'ShareBear'}
+              </Text>
+
+              <View
+                style={[
+                  styles.centerNetworkBadge,
+                  {
+                    backgroundColor: `${colors.secondary}15`,
+                    borderColor: `${colors.secondary}30`,
+                  },
+                ]}
+              >
+                <Wifi size={11} color={colors.secondary} strokeWidth={2.2} style={{ marginRight: 4 }} />
+                <Text style={[styles.centerNetworkText, { color: colors.secondary }]} numberOfLines={1}>
+                  {localIp || '127.0.0.1'} • {wifiName || 'Wi-Fi'}
                 </Text>
               </View>
             </View>
@@ -557,79 +663,135 @@ export function NearbyScreen() {
             </View>
           </View>
         ) : (
-          /* 3. If NO files selected yet: Show Quick Action Cards Row */
-          <View style={styles.actionGridRow}>
-            {/* File Card */}
-            <TouchableOpacity
-              style={[
-                styles.actionItemCard,
-                {
-                  backgroundColor: colors.surfaceElevated,
-                  borderColor: colors.cardBorder,
-                },
-              ]}
-              activeOpacity={0.8}
-              onPress={() => handleActionCardPress('file')}
-            >
-              <View style={styles.actionIconContainer}>
-                <FileText size={32} color={colors.primary} strokeWidth={2.2} />
+          /* 3. If NO files selected yet: Show Target Device Banner (if selected) + Quick Action Cards Row */
+          <View style={{ width: '100%', marginBottom: 8 }}>
+            {selectedTargetDevice && (
+              <View
+                style={[
+                  styles.activeTargetCard,
+                  {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: `${colors.primary}55`,
+                    shadowColor: colors.primary,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.activeTargetAvatar,
+                    {
+                      backgroundColor: colors.primaryContainer,
+                      borderColor: `${colors.primary}33`,
+                    },
+                  ]}
+                >
+                  {getDeviceIcon(selectedTargetDevice.platform, selectedTargetDevice.name)}
+                </View>
+                <View style={styles.activeTargetInfo}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={[styles.activeTargetTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                      {selectedTargetDevice.name}
+                    </Text>
+                    <View
+                      style={[
+                        styles.targetFavoritePill,
+                        {
+                          backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                          borderColor: 'rgba(239, 68, 68, 0.3)',
+                        },
+                      ]}
+                    >
+                      <ShieldCheck size={11} color="#EF4444" style={{ marginRight: 2 }} />
+                      <Text style={styles.targetFavoritePillText}>Trusted</Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.activeTargetSub, { color: colors.secondary }]}>
+                    {selectedTargetDevice.ip}:{selectedTargetDevice.port || 53317} • Ready to send
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.clearTargetBtn, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}
+                  onPress={() => setSelectedTargetDevice(null)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <X size={15} color={colors.textSecondary} />
+                </TouchableOpacity>
               </View>
-              <Text style={[styles.actionItemLabel, { color: colors.textPrimary }]}>File</Text>
-            </TouchableOpacity>
+            )}
 
-            {/* Folder Card */}
-            <TouchableOpacity
-              style={[
-                styles.actionItemCard,
-                {
-                  backgroundColor: colors.surfaceElevated,
-                  borderColor: colors.cardBorder,
-                },
-              ]}
-              activeOpacity={0.8}
-              onPress={() => handleActionCardPress('folder')}
-            >
-              <View style={styles.actionIconContainer}>
-                <Folder size={32} color={colors.primary} strokeWidth={2.2} />
-              </View>
-              <Text style={[styles.actionItemLabel, { color: colors.textPrimary }]}>Folder</Text>
-            </TouchableOpacity>
+            <View style={styles.actionGridRow}>
+              {/* File Card */}
+              <TouchableOpacity
+                style={[
+                  styles.actionItemCard,
+                  {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+                activeOpacity={0.8}
+                onPress={() => handleActionCardPress('file')}
+              >
+                <View style={styles.actionIconContainer}>
+                  <FileText size={32} color={colors.primary} strokeWidth={2.2} />
+                </View>
+                <Text style={[styles.actionItemLabel, { color: colors.textPrimary }]}>File</Text>
+              </TouchableOpacity>
 
-            {/* Text Card */}
-            <TouchableOpacity
-              style={[
-                styles.actionItemCard,
-                {
-                  backgroundColor: colors.surfaceElevated,
-                  borderColor: colors.cardBorder,
-                },
-              ]}
-              activeOpacity={0.8}
-              onPress={() => handleActionCardPress('text')}
-            >
-              <View style={styles.actionIconContainer}>
-                <AlignLeft size={32} color={colors.primary} strokeWidth={2.2} />
-              </View>
-              <Text style={[styles.actionItemLabel, { color: colors.textPrimary }]}>Text</Text>
-            </TouchableOpacity>
+              {/* Folder Card */}
+              <TouchableOpacity
+                style={[
+                  styles.actionItemCard,
+                  {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+                activeOpacity={0.8}
+                onPress={() => handleActionCardPress('folder')}
+              >
+                <View style={styles.actionIconContainer}>
+                  <Folder size={32} color={colors.primary} strokeWidth={2.2} />
+                </View>
+                <Text style={[styles.actionItemLabel, { color: colors.textPrimary }]}>Folder</Text>
+              </TouchableOpacity>
 
-            {/* Paste Card */}
-            <TouchableOpacity
-              style={[
-                styles.actionItemCard,
-                {
-                  backgroundColor: colors.surfaceElevated,
-                  borderColor: colors.cardBorder,
-                },
-              ]}
-              activeOpacity={0.8}
-              onPress={() => handleActionCardPress('paste')}
-            >
-              <View style={styles.actionIconContainer}>
-                <Clipboard size={32} color={colors.primary} strokeWidth={2.2} />
-              </View>
-              <Text style={[styles.actionItemLabel, { color: colors.textPrimary }]}>Paste</Text>
-            </TouchableOpacity>
+              {/* Text Card */}
+              <TouchableOpacity
+                style={[
+                  styles.actionItemCard,
+                  {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+                activeOpacity={0.8}
+                onPress={() => handleActionCardPress('text')}
+              >
+                <View style={styles.actionIconContainer}>
+                  <AlignLeft size={32} color={colors.primary} strokeWidth={2.2} />
+                </View>
+                <Text style={[styles.actionItemLabel, { color: colors.textPrimary }]}>Text</Text>
+              </TouchableOpacity>
+
+              {/* Paste Card */}
+              <TouchableOpacity
+                style={[
+                  styles.actionItemCard,
+                  {
+                    backgroundColor: colors.surfaceElevated,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+                activeOpacity={0.8}
+                onPress={() => handleActionCardPress('paste')}
+              >
+                <View style={styles.actionIconContainer}>
+                  <Clipboard size={32} color={colors.primary} strokeWidth={2.2} />
+                </View>
+                <Text style={[styles.actionItemLabel, { color: colors.textPrimary }]}>Paste</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -670,32 +832,37 @@ export function NearbyScreen() {
               />
             </TouchableOpacity>
 
-            {/* Favorites Filter Button */}
+            {/* Favorites & Trusted Devices Modal Button */}
             <TouchableOpacity
               style={[
                 styles.headerActionBtn,
                 {
-                  backgroundColor: showFavoritesOnly ? colors.primaryContainer : colors.surfaceElevated,
+                  backgroundColor: Object.keys(favoriteDevices).length > 0 ? 'rgba(239, 68, 68, 0.15)' : colors.surfaceElevated,
+                  borderColor: Object.keys(favoriteDevices).length > 0 ? 'rgba(239, 68, 68, 0.35)' : 'transparent',
+                  borderWidth: Object.keys(favoriteDevices).length > 0 ? 1 : 0,
                 },
               ]}
               activeOpacity={0.7}
-              onPress={() => setShowFavoritesOnly(!showFavoritesOnly)}
+              onPress={() => setFavoriteModalVisible(true)}
             >
               <Heart
                 size={17}
-                color={showFavoritesOnly ? '#EF4444' : colors.textPrimary}
-                fill={showFavoritesOnly ? '#EF4444' : 'transparent'}
+                color={Object.keys(favoriteDevices).length > 0 ? '#EF4444' : colors.textPrimary}
+                fill={Object.keys(favoriteDevices).length > 0 ? '#EF4444' : 'transparent'}
                 strokeWidth={2.2}
               />
             </TouchableOpacity>
 
-            {/* Settings Button */}
+            {/* Add Manual Device Button */}
             <TouchableOpacity
               style={[styles.headerActionBtn, { backgroundColor: colors.surfaceElevated }]}
               activeOpacity={0.7}
+              onPress={() => setManualModalVisible(true)}
             >
-              <Settings size={17} color={colors.textPrimary} strokeWidth={2.2} />
+              <Plus size={18} color={colors.textPrimary} strokeWidth={2.2} />
             </TouchableOpacity>
+
+              
           </View>
         </View>
 
@@ -721,7 +888,7 @@ export function NearbyScreen() {
           </View>
         ) : (
           displayedDevices.map((device) => {
-            const isFav = !!favorites[device.id];
+            const isFav = !!favoriteDevices[device.id];
             const platformLabel = getPlatformLabel(device.platform, device.name);
             const ipTag = getIpTag(device.ip);
 
@@ -749,13 +916,51 @@ export function NearbyScreen() {
                     {device.name}
                   </Text>
                   <View style={styles.badgeRow}>
-                    {/* IP Last Octet Badge */}
-                    <View style={[styles.tagBadge, { backgroundColor: `${colors.secondary}20` }]}>
-                      <Text style={[styles.tagBadgeText, { color: colors.secondary }]}>{ipTag}</Text>
+                    {/* Full IP Address Badge */}
+                    <View
+                      style={[
+                        styles.tagBadge,
+                        styles.tagBadgeRow,
+                        {
+                          backgroundColor: `${colors.secondary}18`,
+                          borderColor: `${colors.secondary}33`,
+                          borderWidth: 0.8,
+                        },
+                      ]}
+                    >
+                      <Wifi size={11} color={colors.secondary} strokeWidth={2.2} style={{ marginRight: 4 }} />
+                      <Text style={[styles.tagBadgeText, { color: colors.secondary }]}>
+                        {device.ip}{device.port ? `:${device.port}` : ''}
+                      </Text>
+                    </View>
+
+                    {/* Wi-Fi Name Badge */}
+                    <View
+                      style={[
+                        styles.tagBadge,
+                        {
+                          backgroundColor: colors.surfaceElevated,
+                          borderColor: colors.cardBorder,
+                          borderWidth: 0.8,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.tagBadgeText, { color: colors.textSecondary }]}>
+                        {wifiName || 'Wi-Fi'}
+                      </Text>
                     </View>
 
                     {/* Platform Badge */}
-                    <View style={[styles.tagBadge, { backgroundColor: `${colors.primary}20` }]}>
+                    <View
+                      style={[
+                        styles.tagBadge,
+                        {
+                          backgroundColor: `${colors.primary}18`,
+                          borderColor: `${colors.primary}33`,
+                          borderWidth: 0.8,
+                        },
+                      ]}
+                    >
                       <Text style={[styles.tagBadgeText, { color: colors.primary }]}>{platformLabel}</Text>
                     </View>
                   </View>
@@ -765,7 +970,7 @@ export function NearbyScreen() {
                 <TouchableOpacity
                   style={styles.heartBtn}
                   activeOpacity={0.7}
-                  onPress={() => toggleFavorite(device.id)}
+                  onPress={() => toggleFavorite(device)}
                 >
                   <Heart
                     size={22}
@@ -1113,6 +1318,20 @@ export function NearbyScreen() {
         visible={profileModalVisible}
         onClose={() => setProfileModalVisible(false)}
       />
+
+      {/* Add Manual Device Modal */}
+      <ManualDeviceModal
+        visible={manualModalVisible}
+        onClose={() => setManualModalVisible(false)}
+      />
+
+      {/* Favorite & Trusted Devices Picker Modal */}
+      <FavoriteDevicesModal
+        visible={favoriteModalVisible}
+        onClose={() => setFavoriteModalVisible(false)}
+        onSelectDevice={handleSelectFavoriteDevice}
+        currentWifiName={wifiName}
+      />
     </View>
   );
 }
@@ -1312,14 +1531,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexWrap: 'wrap',
   },
   tagBadge: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
   },
+  tagBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   tagBadgeText: {
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: '700',
   },
   heartBtn: {
@@ -1330,86 +1554,103 @@ const styles = StyleSheet.create({
   radarSection: {
     alignItems: 'center',
     justifyContent: 'center',
-    height: 290,
+    height: 330,
     position: 'relative',
     marginVertical: 10,
   },
   staticRing: {
     position: 'absolute',
     borderRadius: 999,
-    borderWidth: 1,
+    borderWidth: 1.5,
   },
   staticRingOuter: {
-    width: 280,
-    height: 280,
+    width: 300,
+    height: 300,
   },
   staticRingInner: {
-    width: 190,
-    height: 190,
+    width: 215,
+    height: 215,
   },
   radarWave: {
     position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    borderWidth: 1.5,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    borderWidth: 2,
   },
   centerDeviceBadge: {
-    width: 100,
-    height: 68,
-    borderRadius: 14,
+    minWidth: 180,
+    maxWidth: 230,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 24,
     borderWidth: 1.5,
-    padding: 4,
-    justifyContent: 'center',
     alignItems: 'center',
-    elevation: 6,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    justifyContent: 'center',
+    elevation: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
     shadowRadius: 10,
     zIndex: 3,
   },
-  centerDeviceScreen: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 10,
+  mascotAvatarCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    marginBottom: 8,
+    elevation: 2,
   },
   centerDeviceIcon: {
-    fontSize: 22,
-    marginBottom: 2,
+    fontSize: 26,
   },
-  centerDeviceSub: {
-    fontSize: 9,
+  centerDeviceTitle: {
+    fontSize: 15,
     fontWeight: 'bold',
     textAlign: 'center',
+    marginBottom: 6,
+    letterSpacing: 0.2,
+  },
+  centerNetworkBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    maxWidth: 200,
+  },
+  centerNetworkText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   statusPill: {
     position: 'absolute',
-    bottom: 6,
+    bottom: 2,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 24,
+    borderRadius: 26,
     borderWidth: 1,
-    elevation: 3,
+    elevation: 4,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
     shadowRadius: 6,
     zIndex: 4,
   },
   pulseDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
     marginRight: 8,
   },
   statusPillText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: 0.2,
   },
   emptyCard: {
@@ -1630,5 +1871,60 @@ const styles = StyleSheet.create({
   doneEditBtnText: {
     fontSize: 15,
     fontWeight: 'bold',
+  },
+  activeTargetCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 18,
+    borderWidth: 1.2,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+    elevation: 3,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+  },
+  activeTargetAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  activeTargetInfo: {
+    flex: 1,
+  },
+  activeTargetTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  activeTargetSub: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  targetFavoritePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    borderWidth: 0.8,
+  },
+  targetFavoritePillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
+  clearTargetBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
 });

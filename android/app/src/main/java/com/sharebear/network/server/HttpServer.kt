@@ -8,6 +8,7 @@ import com.sharebear.network.server.endpoints.InfoEndpoint
 import com.sharebear.network.server.endpoints.PingEndpoint
 import com.sharebear.network.server.endpoints.TransferRequestHandler
 import com.sharebear.network.server.endpoints.FileTransferEndpoint
+import com.sharebear.network.server.endpoints.TextTransferEndpoint
 import com.sharebear.network.server.models.Request
 import com.sharebear.network.server.models.Response
 import java.net.ServerSocket
@@ -29,7 +30,8 @@ class HttpServer(
     private val onStatsUpdated: (requests: Int, lastRequestIp: String) -> Unit,
     private val onDownloadProgress: (transferId: String, bytesReceived: Long, totalBytes: Long) -> Unit,
     private val onDownloadComplete: (transferId: String, filePath: String, fileSize: Long) -> Unit,
-    private val onDownloadError: (transferId: String, error: String) -> Unit
+    private val onDownloadError: (transferId: String, error: String) -> Unit,
+    private val onTextReceived: (transferId: String, text: String, transferType: String, senderIp: String) -> Unit
 ) {
     private val TAG = "HttpServer"
     
@@ -51,6 +53,7 @@ class HttpServer(
         router.register("/capabilities", CapabilityEndpoint())
         router.register("/transfer/request", TransferRequestHandler(onIncomingTransferRequest))
         router.register("/transfer/*/file", FileTransferEndpoint(context, onDownloadProgress, onDownloadComplete, onDownloadError))
+        router.register("/transfer/*/text", TextTransferEndpoint(onTextReceived))
     }
 
     /**

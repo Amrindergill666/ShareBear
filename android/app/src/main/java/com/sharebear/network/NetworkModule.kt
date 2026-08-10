@@ -1,5 +1,10 @@
 package com.sharebear.network
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.wifi.WifiInfo
+import android.net.wifi.WifiManager
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.sharebear.network.discovery.DiscoveryEngine
@@ -72,6 +77,15 @@ class NetworkModule(private val reactContext: ReactApplicationContext) :
                         putString("error", error)
                     }
                     emitEvent("TransferError", map)
+                },
+                onTextReceived = { transferId, text, transferType, senderIp ->
+                    val map = Arguments.createMap().apply {
+                        putString("transferId", transferId)
+                        putString("text", text)
+                        putString("transferType", transferType)
+                        putString("senderIp", senderIp)
+                    }
+                    emitEvent("TextTransferReceived", map)
                 }
             )
             newServer.start()
@@ -80,6 +94,50 @@ class NetworkModule(private val reactContext: ReactApplicationContext) :
         } catch (e: Exception) {
             promise.reject("START_SERVER_ERROR", e.message, e)
         }
+    }
+
+    /**
+     * Sends pure text or clipboard payload to a peer via HTTP POST /transfer/{transferId}/text
+     */
+    @ReactMethod
+    fun sendTextPayload(
+        transferId: String,
+        peerIp: String,
+        peerPort: Int,
+        text: String,
+        transferType: String,
+        promise: Promise
+    ) {
+        Thread {
+            try {
+                val url = java.net.URL("http://$peerIp:$peerPort/transfer/$transferId/text")
+                val connection = url.openConnection() as java.net.HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                val bodyBytes = text.toByteArray(Charsets.UTF_8)
+                connection.setFixedLengthStreamingMode(bodyBytes.size)
+                connection.connectTimeout = 10000
+                connection.readTimeout = 15000
+
+                connection.setRequestProperty("Content-Type", "text/plain; charset=utf-8")
+                connection.setRequestProperty("X-Transfer-Type", transferType)
+
+                val outputStream = connection.outputStream
+                outputStream.write(bodyBytes)
+                outputStream.flush()
+                outputStream.close()
+
+                val responseCode = connection.responseCode
+                if (responseCode == 200) {
+                    val responseBody = connection.inputStream.bufferedReader().use { it.readText() }
+                    promise.resolve(responseBody)
+                } else {
+                    promise.reject("TEXT_SEND_ERROR", "HTTP response code: $responseCode")
+                }
+            } catch (e: Exception) {
+                promise.reject("TEXT_SEND_ERROR", e.message, e)
+            }
+        }.start()
     }
 
     /**
@@ -103,7 +161,11 @@ class NetworkModule(private val reactContext: ReactApplicationContext) :
                 val connection = url.openConnection() as java.net.HttpURLConnection
                 connection.requestMethod = "POST"
                 connection.doOutput = true
-                connection.setChunkedStreamingMode(64 * 1024)
+                if (size > 0) {
+                    connection.setFixedLengthStreamingMode(size)
+                } else {
+                    connection.setChunkedStreamingMode(64 * 1024)
+                }
                 connection.connectTimeout = 10000
                 connection.readTimeout = 60000
 
@@ -331,6 +393,76 @@ class NetworkModule(private val reactContext: ReactApplicationContext) :
             promise.resolve(ip)
         } catch (e: Exception) {
             promise.reject("IP_ERROR", e.message, e)
+        }
+    }
+
+    private fun cleanSSID(rawSSID: String?): String? {
+        if (rawSSID == null) return null
+        var s = rawSSID.trim()
+        if (s.startsWith("\"") && s.endsWith("\"") && s.length >= 2) {
+            s = s.substring(1, s.length - 1)
+        }
+        if (s.isEmpty() || s == "<unknown ssid>" || s == "0x" || s.equals("unknown", ignoreCase = true)) {
+            return null
+        }
+        return s
+    }
+
+    @ReactMethod
+    fun getWifiName(promise: Promise) {
+        try {
+            val connectivityManager = reactContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            val wifiManager = reactContext.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+
+            var wifiName: String? = null
+
+            // 1. Android 10+ (API 29+) NetworkCapabilities.transportInfo
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                val activeNetwork = connectivityManager?.activeNetwork
+                val caps = connectivityManager?.getNetworkCapabilities(activeNetwork)
+                val wifiInfo = caps?.transportInfo as? WifiInfo
+                if (wifiInfo != null) {
+                    wifiName = cleanSSID(wifiInfo.ssid)
+                }
+            }
+
+            // 2. WifiManager connectionInfo
+            if (wifiName == null) {
+                val wifiInfo = wifiManager?.connectionInfo
+                if (wifiInfo != null) {
+                    wifiName = cleanSSID(wifiInfo.ssid)
+                }
+            }
+
+            // 3. Legacy extraInfo
+            if (wifiName == null) {
+                try {
+                    @Suppress("DEPRECATION")
+                    val netInfo = connectivityManager?.getNetworkInfo(ConnectivityManager.TYPE_WIFI)
+                    if (netInfo != null) {
+                        wifiName = cleanSSID(netInfo.extraInfo)
+                    }
+                } catch (ignored: Exception) {}
+            }
+
+            // 4. Fallback from NetworkCapabilities if connected to Wi-Fi/Cellular/Hotspot
+            if (wifiName == null) {
+                val activeNetwork = connectivityManager?.activeNetwork
+                val caps = connectivityManager?.getNetworkCapabilities(activeNetwork)
+                if (caps != null) {
+                    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                        wifiName = "Wi-Fi"
+                    } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                        wifiName = "Cellular Data"
+                    } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+                        wifiName = "Ethernet"
+                    }
+                }
+            }
+
+            promise.resolve(wifiName ?: "Wi-Fi")
+        } catch (e: Exception) {
+            promise.resolve("Wi-Fi")
         }
     }
 

@@ -30,8 +30,8 @@ class TransferRequestHandler(
             // Trigger callback to notify React Native bridge of incoming transfer request
             onIncomingRequest(transferId, request.body)
 
-            // Block HTTP thread for up to 30 seconds waiting for user action
-            val completed = session.latch.await(30, TimeUnit.SECONDS)
+            // Block HTTP thread for up to 60 seconds waiting for user action
+            val completed = session.latch.await(60, TimeUnit.SECONDS)
 
             if (!completed) {
                 // Timeout occurred

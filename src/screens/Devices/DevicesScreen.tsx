@@ -17,6 +17,7 @@ import { NativeNetworkModule } from '../../native/NetworkModule';
 import { startOutgoingTransfer } from '../../features/transfer/TransferManager';
 import { FilePickerModal } from '../../components/FilePickerModal';
 import { DeviceProfileModal } from '../../components/DeviceProfileModal';
+import { ManualDeviceModal } from '../../components/ManualDeviceModal';
 import DocumentPicker from 'react-native-document-picker';
 import {
   Menu,
@@ -31,18 +32,20 @@ import {
   CheckCircle2,
   Trash2,
   Share2,
+  Heart,
   X,
 } from 'lucide-react-native';
 
 export function DevicesScreen() {
   const { deviceName, mascotSymbol } = useSettingsStore();
-  const { devices, removeDevice } = useDeviceStore();
+  const { devices, removeDevice, favoriteDevices, toggleFavorite } = useDeviceStore();
   const { colors } = useTheme();
   const [localIp, setLocalIp] = useState('127.0.0.1');
   const [freeStorageText, setFreeStorageText] = useState('12 GB Free');
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [menuModalVisible, setMenuModalVisible] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
+  const [manualModalVisible, setManualModalVisible] = useState(false);
   const [filePickerVisible, setFilePickerVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
 
@@ -104,7 +107,7 @@ export function DevicesScreen() {
   const handleFilesSelected = async (files: { id: string; name: string; size: number; mime: string; uri?: string }[]) => {
     if (!selectedDevice || files.length === 0) return;
     try {
-      await startOutgoingTransfer(selectedDevice.ip, selectedDevice.port, files);
+      await startOutgoingTransfer(selectedDevice.ip, selectedDevice.port, files, selectedDevice.name);
     } catch (err) {
       console.error('[DevicesScreen] File transfer error:', err);
     }
@@ -323,6 +326,27 @@ export function DevicesScreen() {
 
             <TouchableOpacity
               style={[styles.modalActionRow, { borderColor: colors.cardBorder }]}
+              onPress={() => {
+                if (selectedDevice) {
+                  toggleFavorite(selectedDevice);
+                }
+                setMenuModalVisible(false);
+              }}
+            >
+              <Heart
+                size={20}
+                color="#EF4444"
+                fill={selectedDevice && !!favoriteDevices[selectedDevice.id] ? '#EF4444' : 'transparent'}
+              />
+              <Text style={[styles.modalActionText, { color: colors.textPrimary }]}>
+                {selectedDevice && !!favoriteDevices[selectedDevice.id]
+                  ? 'Remove from Favorites'
+                  : 'Add to Favorites / Trusted'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalActionRow, { borderColor: colors.cardBorder }]}
               onPress={handleSendFile}
             >
               <Share2 size={20} color={colors.primary} />
@@ -373,6 +397,27 @@ export function DevicesScreen() {
             </Text>
 
             <TouchableOpacity
+              style={[
+                styles.doneButton,
+                {
+                  backgroundColor: colors.surfaceElevated,
+                  borderColor: colors.cardBorder,
+                  borderWidth: 1,
+                  marginBottom: 10,
+                },
+              ]}
+              activeOpacity={0.85}
+              onPress={() => {
+                setAddModalVisible(false);
+                setManualModalVisible(true);
+              }}
+            >
+              <Text style={[styles.doneButtonText, { color: colors.textPrimary }]}>
+                Add Manually by IP & Port
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={[styles.doneButton, { backgroundColor: colors.primary }]}
               activeOpacity={0.85}
               onPress={() => setAddModalVisible(false)}
@@ -382,6 +427,12 @@ export function DevicesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Manual Device IP Modal */}
+      <ManualDeviceModal
+        visible={manualModalVisible}
+        onClose={() => setManualModalVisible(false)}
+      />
 
       {/* File Selection Picker Modal */}
       <FilePickerModal
