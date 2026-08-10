@@ -29,7 +29,10 @@ import { DeviceProfileModal } from '../../components/DeviceProfileModal';
 import { ManualDeviceModal } from '../../components/ManualDeviceModal';
 import { FavoriteDevicesModal } from '../../components/FavoriteDevicesModal';
 import { NativeNetworkModule } from '../../native/NetworkModule';
+import { requestMediaPermissions } from '../../native/MediaModule';
 import { getSystemClipboardText } from '../../utils/clipboard';
+import { getAvatarImage } from '../../utils/avatars';
+import { AvatarImage, getAvatarContainerRadius } from '../../components/AvatarImage';
 import DocumentPicker from 'react-native-document-picker';
 import { useTheme } from '../../theme';
 import {
@@ -258,6 +261,7 @@ export function NearbyScreen() {
 
   const handleActionCardPress = async (action: 'file' | 'folder' | 'text' | 'paste') => {
     if (action === 'file') {
+      await requestMediaPermissions();
       setFilePickerVisible(true);
     } else if (action === 'folder') {
       try {
@@ -466,11 +470,11 @@ export function NearbyScreen() {
               styles.headerProfileBadge,
               {
                 backgroundColor: colors.primaryContainer,
-                borderColor: `${colors.primary}44`,
+                borderWidth: 0,
               },
             ]}
           >
-            <Text style={styles.headerProfileEmoji}>{mascotSymbol || '🐻'}</Text>
+            <AvatarImage id={mascotSymbol} size={28} />
           </View>
         </TouchableOpacity>
       </View>
@@ -531,11 +535,11 @@ export function NearbyScreen() {
                   styles.mascotAvatarCircle,
                   {
                     backgroundColor: colors.primaryContainer,
-                    borderColor: `${colors.primary}44`,
+                    borderWidth:0
                   },
                 ]}
               >
-                <Text style={styles.centerDeviceIcon}>{mascotSymbol || '🐻'}</Text>
+                <AvatarImage id={mascotSymbol} size={44} />
               </View>
 
               <Text style={[styles.centerDeviceTitle, { color: colors.textPrimary }]} numberOfLines={1}>
@@ -1360,10 +1364,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 3,
   },
-  headerProfileEmoji: {
-    fontSize: 18,
+  headerProfileImage: {
+    width: 28,
+    height: 28,
   },
   headerTitle: {
     fontSize: 20,
@@ -1601,10 +1605,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
-    elevation: 2,
   },
-  centerDeviceIcon: {
-    fontSize: 26,
+  centerDeviceMascotImage: {
+    width: 40,
+    height: 40,
   },
   centerDeviceTitle: {
     fontSize: 15,

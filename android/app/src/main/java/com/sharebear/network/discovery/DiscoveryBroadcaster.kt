@@ -16,6 +16,7 @@ class DiscoveryBroadcaster(
     private val deviceId: String,
     private val deviceName: String,
     private val httpPort: Int,
+    private val avatarId: String = "main",
     private val discoveryPort: Int = 53317
 ) {
     private val TAG = "DiscoveryBroadcaster"
@@ -39,6 +40,7 @@ class DiscoveryBroadcaster(
                     put("deviceName", deviceName)
                     put("platform", "android")
                     put("httpPort", httpPort)
+                    put("avatarId", avatarId)
                     put("timestamp", System.currentTimeMillis() / 1000)
                 }
 

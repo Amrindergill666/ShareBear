@@ -6,13 +6,15 @@ export interface DeviceInfo {
   platform: string;
   ipAddress: string;
   httpPort: number;
+  avatarId?: string;
 }
 
 interface NetworkModuleInterface {
   startDiscovery(
     deviceId: string,
     deviceName: string,
-    httpPort: number
+    httpPort: number,
+    avatarId: string
   ): Promise<void>;
   stopDiscovery(): Promise<void>;
   getDiscoveredDevices(): Promise<DeviceInfo[]>;

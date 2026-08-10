@@ -11,5 +11,6 @@ data class DiscoveryPacket(
     val platform: String,
     val httpPort: Int,
     val timestamp: Long,
-    val ipAddress: String // sender's IP address, set during packet reception
+    val ipAddress: String, // sender's IP address, set during packet reception
+    val avatarId: String = "main" // mascot avatar identifier chosen by the user
 )

@@ -7,6 +7,7 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
+  Image as RNImage,
 } from 'react-native';
 import { useTransferStore } from '../../store/transferStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -14,6 +15,8 @@ import { TransferRepository } from '../../features/transfer/TransferRepository';
 import { Transfer } from '../../features/transfer/models';
 import { DeviceProfileModal } from '../../components/DeviceProfileModal';
 import { useTheme } from '../../theme';
+import { getAvatarImage } from '../../utils/avatars';
+import { AvatarImage, getAvatarContainerRadius } from '../../components/AvatarImage';
 import {
   Menu,
   Bell,
@@ -199,11 +202,11 @@ export function TransferHistoryScreen() {
               styles.headerProfileBadge,
               {
                 backgroundColor: colors.primaryContainer,
-                borderColor: `${colors.primary}44`,
+                borderWidth: 0,
               },
             ]}
           >
-            <Text style={styles.headerProfileEmoji}>{mascotSymbol || '🐻'}</Text>
+            <AvatarImage id={mascotSymbol} size={28} />
           </View>
         </TouchableOpacity>
       </View>
@@ -414,10 +417,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 3,
   },
-  headerProfileEmoji: {
-    fontSize: 18,
+  headerProfileImage: {
+    width: 28,
+    height: 28,
   },
   headerTitle: {
     fontSize: 20,

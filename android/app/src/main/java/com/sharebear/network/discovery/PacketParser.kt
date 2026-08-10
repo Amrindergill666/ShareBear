@@ -56,6 +56,9 @@ object PacketParser {
             // Fallback timestamp if not provided
             val timestamp = json.optLong("timestamp", System.currentTimeMillis())
 
+            // Optional: avatar identifier
+            val avatarId = json.optString("avatarId", "main").trim().ifEmpty { "main" }
+
             return DiscoveryPacket(
                 version = version,
                 type = type,
@@ -64,7 +67,8 @@ object PacketParser {
                 platform = platform,
                 httpPort = httpPort,
                 timestamp = timestamp,
-                ipAddress = ipAddress
+                ipAddress = ipAddress,
+                avatarId = avatarId
             )
         } catch (e: Exception) {
             Log.d(TAG, "Error parsing discovery packet: ${e.message}")

@@ -9,6 +9,7 @@ export interface Device {
   platform: string;
   lastSeen: number;
   isOnline: boolean;
+  avatarId?: string;
 }
 
 const FAVORITES_STORAGE_KEY = 'sharebear_favorite_devices';

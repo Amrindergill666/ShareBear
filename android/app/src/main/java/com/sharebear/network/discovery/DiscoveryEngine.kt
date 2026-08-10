@@ -16,6 +16,7 @@ class DiscoveryEngine(
     private val deviceId: String,
     private val deviceName: String,
     private val httpPort: Int,
+    private val avatarId: String = "main",
     private val discoveryPort: Int = 53317
 ) {
     private val TAG = "DiscoveryEngine"
@@ -23,8 +24,8 @@ class DiscoveryEngine(
     val registry = DeviceRegistry()
     private val duplicateFilter = DuplicateFilter()
 
-    private val broadcaster = DiscoveryBroadcaster(deviceId, deviceName, httpPort, discoveryPort)
-    private val responder = DiscoveryResponder(deviceId, deviceName, httpPort, discoveryPort)
+    private val broadcaster = DiscoveryBroadcaster(deviceId, deviceName, httpPort, avatarId, discoveryPort)
+    private val responder = DiscoveryResponder(deviceId, deviceName, httpPort, avatarId, discoveryPort)
     private val scheduler = DiscoveryScheduler { broadcaster.broadcast() }
 
     private val listener = DiscoveryListener(context, discoveryPort) { packet ->
@@ -97,7 +98,8 @@ class DiscoveryEngine(
             deviceName = packet.deviceName,
             platform = packet.platform,
             ipAddress = packet.ipAddress,
-            httpPort = packet.httpPort
+            httpPort = packet.httpPort,
+            avatarId = packet.avatarId
         )
 
         when (packet.type) {

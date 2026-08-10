@@ -23,6 +23,7 @@ export const initializeDiscoveryListeners = () => {
       platform: device.platform,
       lastSeen: Date.now(),
       isOnline: true,
+      avatarId: device.avatarId || 'main',
     });
   });
 
@@ -62,14 +63,15 @@ export const startDiscovery = async (): Promise<void> => {
 
     const deviceName = settings.deviceName || 'ShareBear Device';
     const httpPort = settings.port || 53318;
+    const avatarId = settings.mascotSymbol || 'main';
 
-    console.log(`[DiscoveryManager] Starting discovery for "${deviceName}" (${deviceId}) on port ${httpPort}...`);
+    console.log(`[DiscoveryManager] Starting discovery for "${deviceName}" (${deviceId}) avatar=${avatarId} on port ${httpPort}...`);
     
     // Set up event listeners
     initializeDiscoveryListeners();
 
     // Start discovery in native Kotlin module
-    await NativeNetworkModule.startDiscovery(deviceId, deviceName, httpPort);
+    await NativeNetworkModule.startDiscovery(deviceId, deviceName, httpPort, avatarId);
     
     // Update store state
     useUiStore.getState().setDiscoveryActive(true);

@@ -11,6 +11,7 @@ import {
   Animated,
   Easing,
   ActivityIndicator,
+  Image as RNImage,
 } from 'react-native';
 import { useTheme } from '../theme';
 import { useSettingsStore } from '../store/settingsStore';
@@ -24,13 +25,8 @@ import {
   Sparkles,
   Pencil,
 } from 'lucide-react-native';
-
-const MASCOT_SYMBOLS = [
-  '🐻', '🐼', '🐨', '🦊', '🐯', '🦁',
-  '🐶', '🐱', '🐰', '🦄', '🚀', '⚡',
-  '🎮', '💎', '🌟', '🔥', '🌸', '🪐',
-  '🦉', '🐢', '🦖', '🐬', '🐙',
-];
+import { AVATARS, getAvatarImage, getAvatarId } from '../utils/avatars';
+import { AvatarImage, getAvatarContainerRadius } from './AvatarImage';
 
 interface DeviceProfileModalProps {
   visible: boolean;
@@ -181,23 +177,31 @@ export function DeviceProfileModal({ visible, onClose }: DeviceProfileModalProps
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
             >
-              {/* Center Mascot Circle with Pencil Edit Button */}
+              {/* Center Mascot with Pencil Edit Button */}
               <View style={styles.avatarSection}>
                 <TouchableOpacity
-                  style={[
-                    styles.avatarLargeCircle,
-                    {
-                      backgroundColor: colors.primaryContainer,
-                      borderColor: colors.primary,
-                      shadowColor: colors.primary,
-                    },
-                  ]}
+                  style={styles.avatarWrapper}
                   activeOpacity={0.8}
                   onPress={() => setAvatarModalVisible(true)}
                 >
-                  <Text style={styles.avatarLargeEmoji}>{tempSymbol}</Text>
+                  <View
+                    style={[
+                      styles.avatarLargeCircle,
+                      {
+                        backgroundColor: colors.primaryContainer,
+                        borderColor: colors.primary,
+                        shadowColor: colors.primary,
+                        borderRadius: getAvatarContainerRadius(tempSymbol, 88),
+                      },
+                    ]}
+                  >
+                    <AvatarImage
+                      id={tempSymbol}
+                      size={getAvatarId(tempSymbol) === 'main' ? 74 : 64}
+                    />
+                  </View>
 
-                  {/* Pencil Edit Icon Badge */}
+                  {/* Pencil Edit Icon Badge in Front */}
                   <View
                     style={[
                       styles.pencilBadge,
@@ -404,31 +408,39 @@ export function DeviceProfileModal({ visible, onClose }: DeviceProfileModalProps
               </TouchableOpacity>
             </View>
 
-            {/* Symbols Grid */}
+            {/* Avatars Grid */}
             <ScrollView
               style={styles.avatarGridScroll}
               contentContainerStyle={styles.symbolsGridContent}
               showsVerticalScrollIndicator={false}
             >
-              {MASCOT_SYMBOLS.map((symbol) => {
-                const isSelected = tempSymbol === symbol;
+              {AVATARS.map((avatar) => {
+                const isSelected = tempSymbol === avatar.id || tempSymbol === avatar.symbol;
                 return (
                   <TouchableOpacity
-                    key={symbol}
+                    key={avatar.id}
                     style={[
-                      styles.symbolPill,
+                      styles.avatarPickCard,
                       {
                         backgroundColor: isSelected ? colors.primaryContainer : colors.surfaceElevated,
                         borderColor: isSelected ? colors.primary : colors.cardBorder,
                       },
                     ]}
-                    activeOpacity={0.7}
-                    onPress={() => handleSelectSymbol(symbol)}
+                    activeOpacity={0.75}
+                    onPress={() => handleSelectSymbol(avatar.id)}
                   >
-                    <Text style={styles.symbolEmoji}>{symbol}</Text>
+                    <AvatarImage id={avatar.id} size={58} />
                     {isSelected && (
-                      <View style={[styles.miniCheckBadge, { backgroundColor: colors.primary }]}>
-                        <Check size={10} color={colors.onPrimary} strokeWidth={3} />
+                      <View
+                        style={[
+                          styles.miniCheckBadge,
+                          {
+                            backgroundColor: colors.primary,
+                            borderColor: colors.cardBg,
+                          },
+                        ]}
+                      >
+                        <Check size={11} color={colors.onPrimary} strokeWidth={3} />
                       </View>
                     )}
                   </TouchableOpacity>
@@ -501,6 +513,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
+  avatarWrapper: {
+    position: 'relative',
+    marginBottom: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   avatarLargeCircle: {
     width: 88,
     height: 88,
@@ -508,15 +526,15 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
     elevation: 4,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
-    position: 'relative',
+    overflow: 'hidden',
   },
-  avatarLargeEmoji: {
-    fontSize: 42,
+  avatarLargeImage: {
+    width: 72,
+    height: 72,
   },
   pencilBadge: {
     position: 'absolute',
@@ -525,10 +543,11 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    borderWidth: 2,
+    borderWidth: 2.5,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 3,
+    elevation: 8,
+    zIndex: 20,
   },
   avatarSubtext: {
     fontSize: 13,
@@ -629,35 +648,54 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   avatarGridScroll: {
-    maxHeight: 280,
+    maxHeight: 340,
   },
   symbolsGridContent: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 12,
-    paddingVertical: 8,
+    gap: 14,
+    paddingVertical: 12,
   },
-  symbolPill: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 1.5,
+  avatarPickCard: {
+    width: 76,
+    height: 76,
+    borderRadius: 22,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  avatarImageClipper: {
+    width: 60,
+    height: 60,
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'relative',
   },
-  symbolEmoji: {
-    fontSize: 26,
+  avatarBottomRounder: {
+    borderBottomLeftRadius: 80,
+    borderBottomRightRadius: 80,
+    overflow: 'hidden',
+  },
+  avatarGridImage: {
+    width: 58,
+    height: 58,
   },
   miniCheckBadge: {
     position: 'absolute',
     bottom: -2,
     right: -2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 5,
+    zIndex: 10,
   },
 });

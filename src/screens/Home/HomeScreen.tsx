@@ -9,6 +9,7 @@ import {
   Modal,
   Platform as RNPlatform,
   TextInput,
+  Image as RNImage,
 } from 'react-native';
 import { useDeviceStore, Device } from '../../store/deviceStore';
 import { useUiStore } from '../../store/uiStore';
@@ -21,6 +22,9 @@ import { RadarAnimation } from '../../components/RadarAnimation';
 import { FilePickerModal } from '../../components/FilePickerModal';
 import { DeviceProfileModal } from '../../components/DeviceProfileModal';
 import { startOutgoingTransfer } from '../../features/transfer/TransferManager';
+import { requestMediaPermissions } from '../../native/MediaModule';
+import { getAvatarImage } from '../../utils/avatars';
+import { AvatarImage, getAvatarContainerRadius } from '../../components/AvatarImage';
 import DocumentPicker from 'react-native-document-picker';
 import { NativeNetworkModule } from '../../native/NetworkModule';
 import { useTransferStore } from '../../store/transferStore';
@@ -78,7 +82,7 @@ export function HomeScreen() {
   const { devices } = useDeviceStore();
   const { isDiscoveryActive } = useUiStore();
   const { deviceName, deviceId, mascotSymbol } = useSettingsStore();
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
 
   const deviceList = Object.values(devices);
 
@@ -112,8 +116,10 @@ export function HomeScreen() {
   // Storage & Battery metric states
   const [freeStorageText, setFreeStorageText] = useState<string>('Calculating...');
   const [freeStorageGB, setFreeStorageGB] = useState<string>('12 GB Free');
-  const [batteryText, setBatteryText] = useState<string>('85%');
-  const [storageRatio, setStorageRatio] = useState<number>(0.5);
+  const [freeStorageNumGB, setFreeStorageNumGB] = useState<number>(12);
+  const [batteryText, setBatteryText] = useState<string>('100%');
+  const [batteryPct, setBatteryPct] = useState<number>(100);
+  const [storageRatio, setStorageRatio] = useState<number>(0.75);
 
   const { transfers } = useTransferStore();
   const transferHistoryList = Object.values(transfers)
@@ -143,13 +149,15 @@ export function HomeScreen() {
         const freeBytes = await getFreeDiskStorage();
         const totalBytes = await getTotalDiskCapacity();
 
-        const freeGB = (freeBytes / (1024 * 1024 * 1024)).toFixed(0);
+        const freeGBNum = freeBytes / (1024 * 1024 * 1024);
+        const freeGB = freeGBNum.toFixed(0);
         const totalGB = (totalBytes / (1024 * 1024 * 1024)).toFixed(1);
+        setFreeStorageNumGB(freeGBNum);
         setFreeStorageText(`${freeGB} GB / ${totalGB} GB`);
         setFreeStorageGB(`${freeGB} GB Free`);
         
         const usedBytes = totalBytes - freeBytes;
-        const ratio = totalBytes > 0 ? usedBytes / totalBytes : 0;
+        const ratio = totalBytes > 0 ? usedBytes / totalBytes : 0.75;
         setStorageRatio(ratio);
       } catch (err) {
         console.error('[HomeScreen] Failed to fetch disk storage:', err);
@@ -159,7 +167,9 @@ export function HomeScreen() {
       try {
         const battery = await getBatteryLevel();
         if (battery >= 0) {
-          setBatteryText(`${Math.round(battery * 100)}%`);
+          const pct = Math.round(battery * 100);
+          setBatteryPct(pct);
+          setBatteryText(`${pct}%`);
         }
       } catch (err) {
         console.log('[HomeScreen] Failed to get battery level:', err);
@@ -245,7 +255,8 @@ export function HomeScreen() {
     }
   };
 
-  const handleSendRequest = (device: Device) => {
+  const handleSendRequest = async (device: Device) => {
+    await requestMediaPermissions();
     setSelectedTargetDevice(device);
     setFilePickerVisible(true);
   };
@@ -372,6 +383,29 @@ export function HomeScreen() {
     }
   };
 
+  // Dynamic Storage Bar Color & Value
+  // Condition: < 5 GB left => Red shade, < 20 GB left => Orange shade, >= 20 GB => Normal shade
+  const storagePct = Math.round(storageRatio * 100);
+  const isStorageCritical = freeStorageNumGB < 5;
+  const isStorageWarn = freeStorageNumGB >= 5 && freeStorageNumGB < 20;
+  const storageBarColor = isStorageCritical
+    ? (isDarkMode ? 'rgba(239, 68, 68, 0.45)' : 'rgba(239, 68, 68, 0.28)')
+    : isStorageWarn
+    ? (isDarkMode ? 'rgba(245, 158, 11, 0.45)' : 'rgba(245, 158, 11, 0.28)')
+    : (isDarkMode ? 'rgba(226, 215, 214, 0.32)' : '#E2D7D6');
+  const storageTextColor = isStorageCritical ? '#EF4444' : isStorageWarn ? '#F59E0B' : (isDarkMode ? colors.textPrimary : '#3B3B52');
+
+  // Dynamic Battery Bar Color & Value
+  // Condition: < 20% => Red shade, 20% to 50% => Orange shade, > 50% => Normal shade
+  const isBatteryCritical = batteryPct < 20;
+  const isBatteryWarn = batteryPct >= 20 && batteryPct <= 50;
+  const batteryBarColor = isBatteryCritical
+    ? (isDarkMode ? 'rgba(239, 68, 68, 0.45)' : 'rgba(239, 68, 68, 0.28)')
+    : isBatteryWarn
+    ? (isDarkMode ? 'rgba(245, 158, 11, 0.45)' : 'rgba(245, 158, 11, 0.28)')
+    : (isDarkMode ? 'rgba(216, 222, 233, 0.35)' : '#D8DEE9');
+  const batteryTextColor = isBatteryCritical ? '#EF4444' : isBatteryWarn ? '#F59E0B' : (isDarkMode ? colors.textPrimary : '#1E293B');
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header Bar */}
@@ -390,11 +424,11 @@ export function HomeScreen() {
               styles.headerProfileBadge,
               {
                 backgroundColor: colors.primaryContainer,
-                borderColor: `${colors.primary}44`,
+                borderWidth:0
               },
             ]}
           >
-            <Text style={styles.headerProfileEmoji}>{mascotSymbol || '🐻'}</Text>
+            <AvatarImage id={mascotSymbol} size={30} />
           </View>
         </TouchableOpacity>
       </View>
@@ -454,32 +488,62 @@ export function HomeScreen() {
 
           {/* Bottom Row: Storage, Battery & IP Metric Boxes */}
           <View style={styles.metricsRow}>
-            {/* Storage Box */}
+            {/* Storage Box with Condition Fill Bar */}
             <View
               style={[
                 styles.metricBox,
                 {
                   backgroundColor: colors.surfaceElevated,
-                  borderColor: colors.cardBorder,
+                  borderColor: isStorageCritical
+                    ? 'rgba(239, 68, 68, 0.45)'
+                    : isStorageWarn
+                    ? 'rgba(245, 158, 11, 0.45)'
+                    : colors.cardBorder,
                 },
               ]}
             >
-              <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Storage</Text>
-              <Text style={[styles.metricValue, { color: colors.primary }]}>{freeStorageGB}</Text>
+              <View
+                style={[
+                  styles.metricFillBar,
+                  {
+                    width: `${Math.min(Math.max(storagePct, 0), 100)}%`,
+                    backgroundColor: storageBarColor,
+                  },
+                ]}
+              />
+              <View style={styles.metricContent}>
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Storage</Text>
+                <Text style={[styles.metricValue, { color: storageTextColor }]}>{freeStorageGB}</Text>
+              </View>
             </View>
 
-            {/* Battery Box */}
+            {/* Battery Box with Condition Fill Bar */}
             <View
               style={[
                 styles.metricBox,
                 {
                   backgroundColor: colors.surfaceElevated,
-                  borderColor: colors.cardBorder,
+                  borderColor: isBatteryCritical
+                    ? 'rgba(239, 68, 68, 0.45)'
+                    : isBatteryWarn
+                    ? 'rgba(245, 158, 11, 0.45)'
+                    : colors.cardBorder,
                 },
               ]}
             >
-              <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Battery</Text>
-              <Text style={[styles.metricValue, { color: colors.textPrimary }]}>{batteryText}</Text>
+              <View
+                style={[
+                  styles.metricFillBar,
+                  {
+                    width: `${Math.min(Math.max(batteryPct, 0), 100)}%`,
+                    backgroundColor: batteryBarColor,
+                  },
+                ]}
+              />
+              <View style={styles.metricContent}>
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Battery</Text>
+                <Text style={[styles.metricValue, { color: batteryTextColor }]}>{batteryText}</Text>
+              </View>
             </View>
 
             {/* IP Address Box */}
@@ -492,10 +556,18 @@ export function HomeScreen() {
                 },
               ]}
             >
-              <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>IP Address</Text>
-              <Text style={[styles.metricValue, { color: colors.secondary, fontSize: 12.5 }]} numberOfLines={1}>
-                {localIp || '127.0.0.1'}
-              </Text>
+              <View style={styles.metricContent}>
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>IP Address</Text>
+                <Text
+                  style={[
+                    styles.metricValue,
+                    { color: isDarkMode ? colors.textPrimary : '#334155', fontSize: 13.5 },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {localIp || '127.0.0.1'}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
@@ -876,10 +948,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 3,
   },
-  headerProfileEmoji: {
-    fontSize: 18,
+  headerProfileImage: {
+    width: 32,
+    height: 32,
   },
   headerTitle: {
     fontSize: 20,
@@ -945,18 +1017,31 @@ const styles = StyleSheet.create({
   },
   metricBox: {
     flex: 1,
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: 18,
+    borderWidth: 1.2,
+    position: 'relative',
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  metricFillBar: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+  },
+  metricContent: {
     paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+    zIndex: 2,
   },
   metricLabel: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
     marginBottom: 4,
   },
   metricValue: {
-    fontSize: 15,
+    fontSize: 14.5,
     fontWeight: 'bold',
     letterSpacing: 0.2,
   },

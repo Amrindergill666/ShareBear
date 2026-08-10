@@ -9,5 +9,6 @@ data class DeviceInfo(
     val platform: String,
     val ipAddress: String,
     val httpPort: Int,
-    var lastSeen: Long = System.currentTimeMillis()
+    var lastSeen: Long = System.currentTimeMillis(),
+    val avatarId: String = "main"
 )

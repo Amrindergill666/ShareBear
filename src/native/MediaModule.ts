@@ -11,35 +11,41 @@ export interface RealMediaFile {
   type: 'photo' | 'video' | 'doc' | 'music';
 }
 
-export async function requestMediaPermissions(): Promise<boolean> {
+export async function requestMediaPermissions(category?: 'photo' | 'video' | 'doc' | 'music'): Promise<boolean> {
   if (Platform.OS !== 'android') return true;
 
   try {
     const androidVersion = Platform.Version;
 
     if (typeof androidVersion === 'number' && androidVersion >= 33) {
-      const granted = await PermissionsAndroid.requestMultiple([
+      const permissions: any[] = [
         PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
         PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
         PermissionsAndroid.PERMISSIONS.READ_MEDIA_AUDIO,
-      ]);
+      ];
+      if ((PermissionsAndroid.PERMISSIONS as any).READ_MEDIA_VISUAL_USER_SELECTED) {
+        permissions.push((PermissionsAndroid.PERMISSIONS as any).READ_MEDIA_VISUAL_USER_SELECTED);
+      }
 
-      const imagesGranted = granted[PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES] === PermissionsAndroid.RESULTS.GRANTED;
+      const granted = await PermissionsAndroid.requestMultiple(permissions);
+
+      const imagesGranted =
+        granted[PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES] === PermissionsAndroid.RESULTS.GRANTED ||
+        (granted as any)['android.permission.READ_MEDIA_VISUAL_USER_SELECTED'] === PermissionsAndroid.RESULTS.GRANTED;
       const videosGranted = granted[PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO] === PermissionsAndroid.RESULTS.GRANTED;
       const audioGranted = granted[PermissionsAndroid.PERMISSIONS.READ_MEDIA_AUDIO] === PermissionsAndroid.RESULTS.GRANTED;
 
       return imagesGranted || videosGranted || audioGranted;
     } else {
-      const granted = await PermissionsAndroid.request(
+      const granted = await PermissionsAndroid.requestMultiple([
         PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-        {
-          title: 'Storage Permission',
-          message: 'ShareBear needs access to your files and photos to select and share them with nearby devices.',
-          buttonPositive: 'Allow',
-          buttonNegative: 'Deny',
-        }
-      );
-      return granted === PermissionsAndroid.RESULTS.GRANTED;
+        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+      ]);
+
+      const readGranted = granted[PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE] === PermissionsAndroid.RESULTS.GRANTED;
+      const writeGranted = granted[PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE] === PermissionsAndroid.RESULTS.GRANTED;
+
+      return readGranted || writeGranted;
     }
   } catch (err) {
     console.error('[MediaModule] Permission request error:', err);

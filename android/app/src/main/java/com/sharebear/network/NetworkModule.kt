@@ -304,7 +304,7 @@ class NetworkModule(private val reactContext: ReactApplicationContext) :
      * Starts the discovery engine with the given device specifications.
      */
     @ReactMethod
-    fun startDiscovery(deviceId: String, deviceName: String, httpPort: Int, promise: Promise) {
+    fun startDiscovery(deviceId: String, deviceName: String, httpPort: Int, avatarId: String, promise: Promise) {
         try {
             // Stop and shut down any previous instance
             engine?.shutdown()
@@ -313,7 +313,8 @@ class NetworkModule(private val reactContext: ReactApplicationContext) :
                 context = reactContext,
                 deviceId = deviceId,
                 deviceName = deviceName,
-                httpPort = httpPort
+                httpPort = httpPort,
+                avatarId = avatarId
             )
             newEngine.addListener(this)
             newEngine.start()
@@ -494,6 +495,7 @@ class NetworkModule(private val reactContext: ReactApplicationContext) :
         map.putString("platform", device.platform)
         map.putString("ipAddress", device.ipAddress)
         map.putInt("httpPort", device.httpPort)
+        map.putString("avatarId", device.avatarId)
         return map
     }
 
